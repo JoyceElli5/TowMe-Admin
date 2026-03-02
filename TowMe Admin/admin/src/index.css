@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply box-border;
+  }
+  
+  html {
+    @apply scroll-smooth;
+  }
+  
+  body {
+    @apply m-0 min-h-screen bg-gray-50 dark:bg-primary-900 text-gray-900 dark:text-white font-sans antialiased transition-colors duration-300;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white dark:bg-primary-800/80 backdrop-blur-xl border border-gray-200 dark:border-primary-700/50 rounded-2xl shadow-lg dark:shadow-xl transition-colors duration-300;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-500 hover:bg-primary-600 text-white dark:text-primary-900 font-semibold px-6 py-3 rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-primary-500/25;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium px-6 py-3 rounded-xl transition-all duration-300 border border-gray-300;
+  }
+  
+  .input-field {
+    @apply w-full bg-white dark:bg-primary-800 border border-gray-300 dark:border-primary-600 rounded-xl px-4 py-3 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-300;
+  }
+  
+  .sidebar-link {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl text-gray-600 dark:text-primary-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-primary-700/50 transition-all duration-300;
+  }
+  
+  .sidebar-link.active {
+    @apply bg-primary-500/10 text-primary-500 border-l-4 border-primary-500;
+  }
+  
+  .stat-card {
+    @apply glass-card p-6 flex flex-col gap-2;
+  }
+  
+  .table-header {
+    @apply text-left text-gray-500 font-medium text-sm uppercase tracking-wide;
+  }
+  
+  .table-cell {
+    @apply py-4 px-4 text-gray-700 dark:text-primary-200 border-b border-gray-200 dark:border-primary-700/50;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent;
+  }
+  
+  .glow {
+    box-shadow: 0 0 30px rgba(245, 166, 35, 0.3);
+  }
+}

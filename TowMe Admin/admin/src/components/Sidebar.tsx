@@ -1,0 +1,328 @@
+
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  LayoutDashboard,
+  Users,
+  Truck,
+  MapPin,
+  DollarSign,
+  Bell,
+  Settings,
+  LogOut,
+  Shield,
+  MessageSquare,
+  CreditCard,
+  ChevronLeft,
+  ChevronRight,
+} from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { cn } from '../lib/utils';
+
+interface SidebarProps {
+  collapsed: boolean;
+  onToggle: () => void;
+}
+
+const menuItems = [
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+  { icon: Truck, label: 'Operators', path: '/operators' },
+  { icon: Users, label: 'Users', path: '/users' },
+  { icon: MapPin, label: 'Requests', path: '/requests' },
+  { icon: DollarSign, label: 'Pricing', path: '/pricing' },
+  { icon: CreditCard, label: 'Payments', path: '/payments' },
+  { icon: Bell, label: 'Notifications', path: '/notifications' },
+  { icon: MessageSquare, label: 'Support', path: '/support' },
+];
+
+const bottomItems = [
+  { icon: Settings, label: 'Settings', path: '/settings' },
+];
+
+// Navigation item animation variants
+const navItemVariants = {
+  initial: { x: -10, opacity: 0 },
+  animate: (i: number) => ({
+    x: 0,
+    opacity: 1,
+    transition: { delay: i * 0.05, duration: 0.3, ease: 'easeOut' }
+  }),
+  hover: { x: 5, transition: { duration: 0.2 } }
+};
+
+const labelVariants = {
+  hidden: { opacity: 0, width: 0 },
+  visible: { opacity: 1, width: 'auto', transition: { duration: 0.2 } }
+};
+
+export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+  const { adminUser, signOut } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate('/');
+  };
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'super_admin':
+        return 'bg-primary-500/20 text-primary-600';
+      case 'operator_manager':
+        return 'bg-blue-500/20 text-blue-600';
+      case 'support_staff':
+        return 'bg-green-500/20 text-green-600';
+      default:
+        return 'bg-gray-200 text-gray-600';
+    }
+  };
+
+  const formatRole = (role: string) => {
+    return role.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
+
+  return (
+    <motion.aside
+      className={cn(
+        'fixed left-0 top-0 h-screen z-40 flex flex-col transition-all duration-300',
+        'bg-white/90 dark:bg-dark-800/80 backdrop-blur-xl border-r border-gray-200 dark:border-dark-700/50 shadow-lg dark:shadow-none',
+        collapsed ? 'w-20' : 'w-64'
+      )}
+      initial={false}
+    >
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-b from-primary-500/5 via-transparent to-transparent pointer-events-none" />
+      
+      {/* Logo */}
+      <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 dark:border-dark-700/50 relative">
+        <NavLink to="/dashboard" className="flex items-center gap-3">
+          <motion.div 
+            className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-primary-500/20"
+            whileHover={{ scale: 1.05, rotate: 5 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Truck className="w-6 h-6 text-white" />
+          </motion.div>
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span
+                className="text-xl font-bold text-gray-900 dark:text-white"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                Tow<span className="text-primary-500">Me</span>
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </NavLink>
+        <motion.button
+          onClick={onToggle}
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700/50 text-gray-400 hover:text-gray-700 dark:hover:text-white transition-colors"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-5 h-5" />
+          ) : (
+            <ChevronLeft className="w-5 h-5" />
+          )}
+        </motion.button>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto relative">
+        {menuItems.map((item, index) => {
+          const isActive = location.pathname === item.path;
+          
+          return (
+            <motion.div
+              key={item.path}
+              custom={index}
+              variants={navItemVariants}
+              initial="initial"
+              animate="animate"
+              whileHover="hover"
+            >
+              <NavLink
+                to={item.path}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 relative group',
+                  isActive
+                    ? 'text-primary-600 dark:text-primary-500'
+                    : 'text-gray-600 dark:text-dark-300 hover:text-gray-900 dark:hover:text-white'
+                )}
+              >
+                {/* Active background with glow */}
+                {isActive && (
+                  <motion.div
+                    className="absolute inset-0 bg-gradient-to-r from-primary-500/15 to-primary-500/5 rounded-xl"
+                    layoutId="activeNavBg"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+                
+                {/* Active indicator line */}
+                {isActive && (
+                  <motion.div
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-primary-500 rounded-r-full"
+                    layoutId="activeNavIndicator"
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+                
+                {/* Hover glow effect */}
+                <div className={cn(
+                  'absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300',
+                  !isActive && 'bg-gray-100 dark:bg-dark-700/30'
+                )} />
+                
+                <motion.div
+                  className="relative z-10"
+                  whileHover={{ rotate: isActive ? 0 : 5 }}
+                >
+                  <item.icon className={cn(
+                    'w-5 h-5 flex-shrink-0 transition-all duration-300',
+                    isActive && 'drop-shadow-[0_0_8px_rgba(16,185,129,0.5)]'
+                  )} />
+                </motion.div>
+                
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span
+                      className="font-medium relative z-10"
+                      variants={labelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="hidden"
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </NavLink>
+            </motion.div>
+          );
+        })}
+      </nav>
+
+      {/* Bottom Section */}
+      <div className="p-4 border-t border-gray-200 space-y-1 relative">
+        {bottomItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          
+          return (
+            <motion.div
+              key={item.path}
+              whileHover={{ x: 5 }}
+            >
+              <NavLink
+                to={item.path}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 relative',
+                  isActive
+                    ? 'bg-primary-500/10 text-primary-600'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                )}
+              >
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <AnimatePresence>
+                  {!collapsed && (
+                    <motion.span 
+                      className="font-medium"
+                      variants={labelVariants}
+                      initial="hidden"
+                      animate="visible"
+                      exit="hidden"
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </NavLink>
+            </motion.div>
+          );
+        })}
+
+        <motion.button
+          onClick={handleLogout}
+          className="flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all duration-300 w-full group"
+          whileHover={{ x: 5 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <motion.div
+            whileHover={{ rotate: -10 }}
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" />
+          </motion.div>
+          <AnimatePresence>
+            {!collapsed && (
+              <motion.span 
+                className="font-medium"
+                variants={labelVariants}
+                initial="hidden"
+                animate="visible"
+                exit="hidden"
+              >
+                Logout
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </motion.button>
+      </div>
+
+      {/* User Profile */}
+      {adminUser && (
+        <motion.div 
+          className="p-4 border-t border-gray-200 relative"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <div className="flex items-center gap-3">
+            <motion.div 
+              className="w-10 h-10 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-primary-500/20"
+              whileHover={{ scale: 1.1 }}
+            >
+              {adminUser.avatar_url ? (
+                <img
+                  src={adminUser.avatar_url}
+                  alt={adminUser.name}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                <Shield className="w-5 h-5 text-primary-500" />
+                              <Shield className="w-5 h-5 text-softOrange" />
+                              <Shield className="w-5 h-5 text-primary-500" />
+              )}
+            </motion.div>
+            <AnimatePresence>
+              {!collapsed && (
+                <motion.div
+                  className="flex-1 min-w-0"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                >
+                  <p className="text-gray-900 font-medium truncate">{adminUser.name}</p>
+                                    <p className="text-darkGray font-medium truncate">{adminUser.name}</p>
+                                    <p className="text-gray-900 font-medium truncate">{adminUser.name}</p>
+                  <span className={cn(
+                    'text-xs px-2 py-0.5 rounded-full inline-block mt-1',
+                    getRoleBadgeColor(adminUser.role)
+                  )}>
+                    {formatRole(adminUser.role)}
+                  </span>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
+    </motion.aside>
+  );
+}
