@@ -65,7 +65,7 @@ const PricingCard = ({
 
   return (
     <motion.div
-      className="bg-dark-800 border border-dark-700 rounded-2xl p-6 hover:border-dark-600 transition-colors"
+      className="glass-card p-6 hover:shadow-[0_18px_45px_rgba(15,23,42,0.16)] transition-shadow"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
@@ -76,7 +76,7 @@ const PricingCard = ({
             <Icon className="w-6 h-6 text-primary-500" />
           </div>
           <div>
-            <h3 className="text-white font-semibold text-lg">{pricing.vehicle_type}</h3>
+            <h3 className="text-gray-900 font-semibold text-lg">{pricing.vehicle_type}</h3>
             {pricing.is_active ? (
               <span className="text-green-400 text-sm flex items-center gap-1">
                 <CheckCircle className="w-3.5 h-3.5" />
@@ -306,19 +306,21 @@ export default function PricingPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Pricing Configuration</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900">
+            Pricing Configuration
+          </h1>
+          <p className="text-gray-500 mt-1">
             Manage pricing for different vehicle types
           </p>
         </div>
       </div>
 
       {/* Info Banner */}
-      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-        <AlertCircle className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
+      <div className="glass-card border border-blue-500/20 bg-blue-500/5 flex items-start gap-3">
+        <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
         <div>
-          <p className="text-blue-400 font-medium">How pricing works</p>
-          <p className="text-blue-300/70 text-sm mt-1">
+          <p className="text-blue-600 font-medium">How pricing works</p>
+          <p className="text-sm mt-1 text-blue-700/80">
             The total price is calculated as: <span className="font-mono">Base Fee + (Per KM Rate × Distance)</span>
           </p>
         </div>
@@ -328,7 +330,7 @@ export default function PricingPage() {
       {isLoading ? (
         <div className="p-12 text-center">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-dark-400">Loading pricing...</p>
+          <p className="text-gray-500">Loading pricing...</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

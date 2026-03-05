@@ -97,11 +97,11 @@ const demoPayments: Payment[] = [
 const getStatusColor = (status: Payment['status']) => {
   switch (status) {
     case 'completed':
-      return 'bg-green-500/10 text-green-500 dark:text-green-400';
+      return 'bg-green-500/10 text-green-500';
     case 'pending':
-      return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400';
+      return 'bg-yellow-500/10 text-yellow-600';
     case 'failed':
-      return 'bg-red-500/10 text-red-500 dark:text-red-400';
+      return 'bg-red-500/10 text-red-500';
   }
 };
 
@@ -173,8 +173,8 @@ export default function PaymentsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Payments & Transactions</h1>
-          <p className="text-gray-500 dark:text-dark-400 mt-1">Manage payments, refunds, and operator payouts</p>
+          <h1 className="text-2xl font-bold text-gray-900">Payments & Transactions</h1>
+          <p className="text-gray-500 mt-1">Manage payments, refunds, and operator payouts</p>
         </div>
         <button className="btn-primary flex items-center gap-2">
           <Download className="w-4 h-4" />
@@ -194,8 +194,8 @@ export default function PaymentsPage() {
               <ArrowDownLeft className="w-5 h-5 text-green-500" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-dark-400">Total Revenue</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">GHS {totalRevenue.toFixed(2)}</p>
+              <p className="text-sm text-gray-500">Total Revenue</p>
+              <p className="text-xl font-bold text-gray-900">GHS {totalRevenue.toFixed(2)}</p>
             </div>
           </div>
         </motion.div>
@@ -211,8 +211,8 @@ export default function PaymentsPage() {
               <RefreshCcw className="w-5 h-5 text-red-500" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-dark-400">Total Refunds</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">GHS {totalRefunds.toFixed(2)}</p>
+              <p className="text-sm text-gray-500">Total Refunds</p>
+              <p className="text-xl font-bold text-gray-900">GHS {totalRefunds.toFixed(2)}</p>
             </div>
           </div>
         </motion.div>
@@ -228,8 +228,8 @@ export default function PaymentsPage() {
               <ArrowUpRight className="w-5 h-5 text-blue-500" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-dark-400">Operator Payouts</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">GHS {totalPayouts.toFixed(2)}</p>
+              <p className="text-sm text-gray-500">Operator Payouts</p>
+              <p className="text-xl font-bold text-gray-900">GHS {totalPayouts.toFixed(2)}</p>
             </div>
           </div>
         </motion.div>
@@ -245,8 +245,8 @@ export default function PaymentsPage() {
               <Clock className="w-5 h-5 text-yellow-600" />
             </div>
             <div>
-              <p className="text-sm text-gray-500 dark:text-dark-400">Pending</p>
-              <p className="text-xl font-bold text-gray-900 dark:text-white">GHS {pendingAmount.toFixed(2)}</p>
+              <p className="text-sm text-gray-500">Pending</p>
+              <p className="text-xl font-bold text-gray-900">GHS {pendingAmount.toFixed(2)}</p>
             </div>
           </div>
         </motion.div>
@@ -276,7 +276,7 @@ export default function PaymentsPage() {
                 'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                 filter === type
                   ? 'bg-primary-500 text-white'
-                  : 'bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-dark-300 hover:bg-gray-200 dark:hover:bg-dark-600'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               )}
             >
               {type.charAt(0).toUpperCase() + type.slice(1)}s
@@ -290,7 +290,7 @@ export default function PaymentsPage() {
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 dark:border-dark-700">
+              <tr className="border-b border-gray-200">
                 <th className="table-header px-6 py-4">Transaction ID</th>
                 <th className="table-header px-6 py-4">Type</th>
                 <th className="table-header px-6 py-4">Amount</th>
@@ -312,28 +312,28 @@ export default function PaymentsPage() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: index * 0.05 }}
-                    className="border-b border-gray-100 dark:border-dark-700/50 hover:bg-gray-50 dark:hover:bg-dark-700/30 transition-colors"
+                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                   >
                     <td className="px-6 py-4">
-                      <span className="font-mono text-sm text-gray-900 dark:text-white">{payment.id}</span>
+                      <span className="font-mono text-sm text-gray-900">{payment.id}</span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <TypeIcon className={cn('w-4 h-4', getTypeColor(payment.type))} />
-                        <span className="text-gray-700 dark:text-dark-300 capitalize">{payment.type}</span>
+                        <span className="text-gray-700 capitalize">{payment.type}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={cn(
                         'font-semibold',
-                        payment.type === 'refund' ? 'text-red-500' : 'text-gray-900 dark:text-white'
+                        payment.type === 'refund' ? 'text-red-500' : 'text-gray-900'
                       )}>
                         {payment.type === 'refund' ? '-' : ''}GHS {payment.amount.toFixed(2)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-700 dark:text-dark-300">{payment.userName}</td>
-                    <td className="px-6 py-4 text-gray-700 dark:text-dark-300">{payment.operatorName}</td>
-                    <td className="px-6 py-4 text-gray-700 dark:text-dark-300">{payment.method}</td>
+                    <td className="px-6 py-4 text-gray-700">{payment.userName}</td>
+                    <td className="px-6 py-4 text-gray-700">{payment.operatorName}</td>
+                    <td className="px-6 py-4 text-gray-700">{payment.method}</td>
                     <td className="px-6 py-4">
                       <span className={cn(
                         'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium',
@@ -343,9 +343,9 @@ export default function PaymentsPage() {
                         {payment.status.charAt(0).toUpperCase() + payment.status.slice(1)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-500 dark:text-dark-400 text-sm">{payment.date}</td>
+                    <td className="px-6 py-4 text-gray-500 text-sm">{payment.date}</td>
                     <td className="px-6 py-4">
-                      <button className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-white transition-colors">
+                      <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors">
                         <Eye className="w-4 h-4" />
                       </button>
                     </td>

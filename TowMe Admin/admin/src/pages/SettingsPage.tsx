@@ -47,8 +47,8 @@ export default function SettingsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
-        <p className="text-gray-500 dark:text-dark-400 mt-1">Manage your account and preferences</p>
+        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <p className="text-gray-500 mt-1">Manage your account and preferences</p>
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6">
@@ -63,7 +63,7 @@ export default function SettingsPage() {
                   'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-colors',
                   activeTab === tab.id
                     ? 'bg-primary-500/10 text-primary-500'
-                    : 'text-gray-600 dark:text-dark-300 hover:bg-gray-100 dark:hover:bg-dark-700'
+                    : 'text-gray-600 hover:bg-gray-100'
                 )}
               >
                 <tab.icon className="w-5 h-5" />
@@ -82,7 +82,7 @@ export default function SettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               className="glass-card p-6 space-y-6"
             >
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Profile Information</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Profile Information</h2>
               
               {/* Avatar */}
               <div className="flex items-center gap-6">
@@ -90,20 +90,20 @@ export default function SettingsPage() {
                   <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-2xl font-bold text-white">
                     {profileForm.name.charAt(0)}
                   </div>
-                  <button className="absolute bottom-0 right-0 p-2 bg-white dark:bg-dark-700 rounded-full shadow-lg border border-gray-200 dark:border-dark-600 hover:bg-gray-50 dark:hover:bg-dark-600 transition-colors">
-                    <Camera className="w-4 h-4 text-gray-600 dark:text-dark-300" />
+                  <button className="absolute bottom-0 right-0 p-2 bg-white rounded-full shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors">
+                    <Camera className="w-4 h-4 text-gray-600" />
                   </button>
                 </div>
                 <div>
-                  <h3 className="font-medium text-gray-900 dark:text-white">{profileForm.name}</h3>
-                  <p className="text-sm text-gray-500 dark:text-dark-400">{adminUser?.role || 'Super Admin'}</p>
+                  <h3 className="font-medium text-gray-900">{profileForm.name}</h3>
+                  <p className="text-sm text-gray-500">{adminUser?.role || 'Super Admin'}</p>
                 </div>
               </div>
 
               {/* Form */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Full Name</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
                   <input
                     type="text"
                     value={profileForm.name}
@@ -112,7 +112,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Email</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
                   <input
                     type="email"
                     value={profileForm.email}
@@ -121,7 +121,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Phone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
                   <input
                     type="text"
                     value={profileForm.phone}
@@ -147,16 +147,16 @@ export default function SettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               className="glass-card p-6 space-y-6"
             >
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Notification Preferences</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Notification Preferences</h2>
               
               <div className="space-y-4">
                 {Object.entries(notifications).map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-dark-700 last:border-0">
+                  <div key={key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
                     <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
+                      <p className="font-medium text-gray-900">
                         {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
                       </p>
-                      <p className="text-sm text-gray-500 dark:text-dark-400">
+                      <p className="text-sm text-gray-500">
                         Receive notifications for {key.replace(/([A-Z])/g, ' $1').toLowerCase()}
                       </p>
                     </div>
@@ -164,7 +164,7 @@ export default function SettingsPage() {
                       onClick={() => setNotifications({ ...notifications, [key]: !value })}
                       className={cn(
                         'relative w-12 h-6 rounded-full transition-colors',
-                        value ? 'bg-primary-500' : 'bg-gray-300 dark:bg-dark-600'
+                        value ? 'bg-primary-500' : 'bg-gray-300'
                       )}
                     >
                       <div className={cn(
@@ -185,38 +185,31 @@ export default function SettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               className="glass-card p-6 space-y-6"
             >
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Appearance</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Appearance</h2>
               
               <div>
-                <p className="font-medium text-gray-900 dark:text-white mb-4">Theme</p>
+                <p className="font-medium text-gray-900 mb-4">Theme</p>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     onClick={() => isDark && toggleTheme()}
                     className={cn(
                       'p-4 rounded-xl border-2 transition-all',
-                      !isDark 
-                        ? 'border-primary-500 bg-primary-500/5' 
-                        : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600'
+                      'border-primary-500 bg-primary-500/5'
                     )}
                   >
                     <div className="w-full h-20 rounded-lg bg-gray-100 mb-3 flex items-center justify-center">
                       <div className="w-3/4 h-12 bg-white rounded shadow-sm" />
                     </div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">Light</p>
+                    <p className="text-sm font-medium text-gray-900">Light</p>
                   </button>
                   <button
-                    onClick={() => !isDark && toggleTheme()}
-                    className={cn(
-                      'p-4 rounded-xl border-2 transition-all',
-                      isDark 
-                        ? 'border-primary-500 bg-primary-500/5' 
-                        : 'border-gray-200 dark:border-dark-700 hover:border-gray-300 dark:hover:border-dark-600'
-                    )}
+                    className="p-4 rounded-xl border-2 border-gray-200 transition-all opacity-60 cursor-not-allowed"
+                    disabled
                   >
                     <div className="w-full h-20 rounded-lg bg-gray-800 mb-3 flex items-center justify-center">
                       <div className="w-3/4 h-12 bg-gray-700 rounded shadow-sm" />
                     </div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">Dark</p>
+                    <p className="text-sm font-medium text-gray-900">Dark</p>
                   </button>
                 </div>
               </div>
@@ -230,31 +223,31 @@ export default function SettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               className="glass-card p-6 space-y-6"
             >
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Security Settings</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Security Settings</h2>
               
               <div className="space-y-6">
                 <div>
-                  <h3 className="font-medium text-gray-900 dark:text-white mb-4">Change Password</h3>
+                  <h3 className="font-medium text-gray-900 mb-4">Change Password</h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Current Password</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Current Password</label>
                       <input type="password" className="input-field" placeholder="••••••••" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">New Password</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">New Password</label>
                       <input type="password" className="input-field" placeholder="••••••••" />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Confirm New Password</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Confirm New Password</label>
                       <input type="password" className="input-field" placeholder="••••••••" />
                     </div>
                   </div>
                   <button className="btn-primary mt-4">Update Password</button>
                 </div>
 
-                <div className="pt-6 border-t border-gray-200 dark:border-dark-700">
-                  <h3 className="font-medium text-gray-900 dark:text-white mb-2">Two-Factor Authentication</h3>
-                  <p className="text-sm text-gray-500 dark:text-dark-400 mb-4">
+                <div className="pt-6 border-t border-gray-200">
+                  <h3 className="font-medium text-gray-900 mb-2">Two-Factor Authentication</h3>
+                  <p className="text-sm text-gray-500 mb-4">
                     Add an extra layer of security to your account
                   </p>
                   <button className="btn-secondary">Enable 2FA</button>
@@ -270,11 +263,11 @@ export default function SettingsPage() {
               animate={{ opacity: 1, y: 0 }}
               className="glass-card p-6 space-y-6"
             >
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">System Settings</h2>
+              <h2 className="text-lg font-semibold text-gray-900">System Settings</h2>
               
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Language</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Language</label>
                   <select className="input-field">
                     <option>English</option>
                     <option>French</option>
@@ -283,7 +276,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Timezone</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Timezone</label>
                   <select className="input-field">
                     <option>Africa/Accra (GMT+0)</option>
                     <option>Africa/Lagos (GMT+1)</option>
@@ -292,7 +285,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-dark-300 mb-2">Currency</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Currency</label>
                   <select className="input-field">
                     <option>GHS - Ghana Cedi</option>
                     <option>USD - US Dollar</option>

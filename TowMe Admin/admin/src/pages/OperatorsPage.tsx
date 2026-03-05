@@ -332,8 +332,10 @@ export default function OperatorsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Operator Management</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900">
+            Operator Management
+          </h1>
+          <p className="text-gray-500 mt-1">
             Manage and approve tow truck operators
           </p>
         </div>
@@ -347,12 +349,12 @@ export default function OperatorsPage() {
               className={cn(
                 'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
                 statusFilter === status
-                  ? 'bg-primary-500 text-dark-900'
-                  : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                  ? 'bg-primary-500 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               )}
             >
               {status.charAt(0).toUpperCase() + status.slice(1)}
-              <span className="ml-2 px-1.5 py-0.5 rounded-md bg-dark-900/30 text-xs">
+              <span className="ml-2 px-1.5 py-0.5 rounded-md bg-gray-200 text-xs text-gray-600">
                 {statusCounts[status]}
               </span>
             </button>
@@ -363,47 +365,47 @@ export default function OperatorsPage() {
       {/* Search Bar */}
       <div className="flex gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             placeholder="Search by name, email, or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500 transition-colors"
+            className="input-field pl-12"
           />
         </div>
       </div>
 
       {/* Operators Table */}
-      <div className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-dark-400">Loading operators...</p>
+            <p className="text-gray-500">Loading operators...</p>
           </div>
         ) : filteredOperators.length === 0 ? (
           <div className="p-12 text-center">
-            <Truck className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-            <p className="text-dark-400">No operators found</p>
+            <Truck className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">No operators found</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-dark-700">
-                  <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Operator</th>
-                  <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Contact</th>
-                  <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Status</th>
-                  <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Stats</th>
-                  <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Registered</th>
-                  <th className="text-right py-4 px-6 text-dark-400 font-medium text-sm">Actions</th>
+                <tr className="border-b border-gray-200">
+                  <th className="table-header px-6 py-4">Operator</th>
+                  <th className="table-header px-6 py-4">Contact</th>
+                  <th className="table-header px-6 py-4">Status</th>
+                  <th className="table-header px-6 py-4">Stats</th>
+                  <th className="table-header px-6 py-4">Registered</th>
+                  <th className="table-header px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredOperators.map((operator, index) => (
                   <motion.tr
                     key={operator.id}
-                    className="border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors"
+                    className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
@@ -411,7 +413,7 @@ export default function OperatorsPage() {
                     {/* Operator Info */}
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-dark-700 overflow-hidden flex-shrink-0">
+                        <div className="w-10 h-10 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
                           {operator.profile_photo_url ? (
                             <img
                               src={operator.profile_photo_url}
@@ -420,21 +422,21 @@ export default function OperatorsPage() {
                             />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center">
-                              <User className="w-5 h-5 text-dark-400" />
+                              <User className="w-5 h-5 text-gray-400" />
                             </div>
                           )}
                         </div>
                         <div>
-                          <p className="text-white font-medium">{operator.full_name}</p>
-                          <p className="text-dark-400 text-sm">{operator.email}</p>
+                          <p className="text-gray-900 font-medium">{operator.full_name}</p>
+                          <p className="text-gray-500 text-sm">{operator.email}</p>
                         </div>
                       </div>
                     </td>
 
                     {/* Contact */}
                     <td className="py-4 px-6">
-                      <div className="flex items-center gap-2 text-dark-300">
-                        <Phone className="w-4 h-4 text-dark-400" />
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Phone className="w-4 h-4 text-gray-400" />
                         {operator.phone}
                       </div>
                     </td>
@@ -447,12 +449,12 @@ export default function OperatorsPage() {
                     {/* Stats */}
                     <td className="py-4 px-6">
                       <div className="flex items-center gap-4 text-sm">
-                        <div className="flex items-center gap-1 text-dark-300">
-                          <Truck className="w-4 h-4 text-dark-400" />
+                        <div className="flex items-center gap-1 text-gray-600">
+                          <Truck className="w-4 h-4 text-gray-400" />
                           {operator.total_trips} trips
                         </div>
                         {operator.rating > 0 && (
-                          <div className="flex items-center gap-1 text-dark-300">
+                          <div className="flex items-center gap-1 text-gray-600">
                             <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
                             {operator.rating.toFixed(1)}
                           </div>
@@ -462,7 +464,7 @@ export default function OperatorsPage() {
 
                     {/* Registered Date */}
                     <td className="py-4 px-6">
-                      <span className="text-dark-300 text-sm">
+                      <span className="text-gray-500 dark:text-dark-300 text-sm">
                         {new Date(operator.created_at).toLocaleDateString()}
                       </span>
                     </td>

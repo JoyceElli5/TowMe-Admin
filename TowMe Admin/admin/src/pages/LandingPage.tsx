@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Truck } from 'lucide-react';
+import { Car01Icon } from 'hugeicons-react';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -14,11 +14,6 @@ export default function LandingPage() {
       className="min-h-screen bg-white flex items-center justify-center cursor-pointer overflow-hidden transition-colors duration-300"
       onClick={handleEnter}
     >
-      {/* Subtle mint/green background accent */}
-      <div className="absolute inset-0">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary-100 rounded-full blur-3xl" />
-      </div>
-
       {/* Main content */}
       <div className="relative z-10 flex flex-col items-center">
         {/* Animated Logo */}
@@ -32,8 +27,8 @@ export default function LandingPage() {
           }}
           className="mb-8"
         >
-          <div className="w-24 h-24 bg-gradient-to-br from-primary-300 to-primary-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-primary-200/40">
-            <Truck className="w-12 h-12 text-white" />
+          <div className="w-24 h-24 bg-gradient-to-br from-primary-300 to-primary-500 rounded-3xl flex items-center justify-center shadow-md">
+            <Car01Icon className="w-12 h-12 text-white" />
           </div>
         </motion.div>
 

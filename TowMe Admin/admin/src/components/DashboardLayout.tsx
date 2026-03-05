@@ -68,7 +68,12 @@ export default function DashboardLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-primary-900 transition-colors duration-300">
+    <div className="min-h-screen bg-transparent relative transition-colors duration-300">
+      {/* Background light gradient + subtle noise overlay */}
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-white via-gray-50 to-gray-100" />
+      </div>
+
       {/* Sidebar */}
       <Sidebar
         collapsed={sidebarCollapsed}
@@ -79,16 +84,17 @@ export default function DashboardLayout() {
       <Header
         title={currentTitle}
         sidebarCollapsed={sidebarCollapsed}
+        onMenuClick={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
       {/* Main Content with Page Transitions */}
       <main
         className={cn(
           'pt-16 min-h-screen transition-all duration-300',
-          sidebarCollapsed ? 'pl-20' : 'pl-64'
+          'pl-20 lg:pl-64'
         )}
       >
-        <div className="p-6">
+        <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

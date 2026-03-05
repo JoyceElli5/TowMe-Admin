@@ -40,16 +40,16 @@ interface StatCardProps {
 const StatCard = ({ title, value, change, icon: Icon, iconBg, onClick }: StatCardProps) => (
   <motion.div
     className={cn(
-      'bg-dark-800 border border-dark-700 rounded-2xl p-6',
-      onClick && 'cursor-pointer hover:border-dark-600 transition-colors'
+      'glass-card p-6',
+      onClick && 'cursor-pointer hover:shadow-[0_20px_55px_rgba(15,23,42,0.18)]'
     )}
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     whileHover={onClick ? { y: -2 } : undefined}
     onClick={onClick}
   >
-    <div className="flex items-start justify-between">
-      <div className={cn('p-3 rounded-xl', iconBg)}>
+    <div className="flex items-start justify-between gap-4">
+      <div className={cn('p-3 rounded-xl shadow-[0_10px_30px_rgba(15,23,42,0.10)]', iconBg)}>
         <Icon className="w-6 h-6" />
       </div>
       {change !== undefined && (
@@ -62,10 +62,10 @@ const StatCard = ({ title, value, change, icon: Icon, iconBg, onClick }: StatCar
         </div>
       )}
     </div>
-    <div className="mt-4">
-      <p className="text-dark-400 text-sm">{title}</p>
-      <p className="text-2xl font-bold text-white mt-1">{value}</p>
-    </div>
+      <div className="mt-4">
+        <p className="text-sm text-gray-500">{title}</p>
+        <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
+      </div>
   </motion.div>
 );
 
@@ -180,7 +180,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-dark-400">Loading dashboard...</p>
+          <p className="text-gray-500">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -191,22 +191,22 @@ export default function DashboardPage() {
       {/* Pending Operators Alert */}
       {stats?.pendingOperators && stats.pendingOperators > 0 && (
         <motion.div
-          className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4 flex items-center justify-between"
+          className="glass-card border border-yellow-500/20 bg-yellow-50/80 flex items-center justify-between p-4"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
         >
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-yellow-400" />
+            <AlertTriangle className="w-5 h-5 text-yellow-500" />
             <div>
-              <p className="text-yellow-400 font-medium">
+              <p className="text-yellow-700 font-medium">
                 {stats.pendingOperators} operator{stats.pendingOperators > 1 ? 's' : ''} awaiting approval
               </p>
-              <p className="text-yellow-400/70 text-sm">Review and approve new operator registrations</p>
+              <p className="text-yellow-600/80 text-sm">Review and approve new operator registrations</p>
             </div>
           </div>
           <button
             onClick={() => navigate('/operators')}
-            className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm hover:bg-yellow-500/30 transition-colors"
+            className="px-4 py-2 bg-yellow-500/90 text-white rounded-lg text-sm hover:bg-yellow-600 transition-colors shadow-[0_10px_30px_rgba(234,179,8,0.45)]"
           >
             Review Now
           </button>
@@ -231,15 +231,15 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Revenue Chart */}
         <motion.div
-          className="lg:col-span-2 bg-dark-800 border border-dark-700 rounded-2xl p-6"
+          className="lg:col-span-2 glass-card p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
         >
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h3 className="text-lg font-semibold text-white">Revenue Overview</h3>
-              <p className="text-dark-400 text-sm">Last 7 days</p>
+              <h3 className="text-lg font-semibold text-gray-900">Revenue Overview</h3>
+              <p className="text-sm text-gray-500">Last 7 days</p>
             </div>
           </div>
           <div className="h-72">
@@ -251,16 +251,16 @@ export default function DashboardPage() {
                     <stop offset="95%" stopColor="#F5A623" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#3d3f45" />
-                <XAxis dataKey="name" stroke="#787c86" />
-                <YAxis stroke="#787c86" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="name" stroke="#9ca3af" />
+                  <YAxis stroke="#9ca3af" />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1a1b1e',
-                    border: '1px solid #3d3f45',
-                    borderRadius: '12px',
-                    color: '#fff',
-                  }}
+                    contentStyle={{
+                      backgroundColor: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '12px',
+                      color: '#111827',
+                    }}
                 />
                 <Area
                   type="monotone"
@@ -277,12 +277,12 @@ export default function DashboardPage() {
 
         {/* Request Status Pie Chart */}
         <motion.div
-          className="bg-white border border-border rounded-2xl p-6 shadow-sm"
+          className="glass-card p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
         >
-          <h3 className="text-lg font-semibold text-white mb-6">Request Status</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-6">Request Status</h3>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -299,14 +299,7 @@ export default function DashboardPage() {
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1a1b1e',
-                    border: '1px solid #3d3f45',
-                    borderRadius: '12px',
-                    color: '#fff',
-                  }}
-                />
+                <Tooltip />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -314,7 +307,7 @@ export default function DashboardPage() {
             {requestsByStatus.map((item) => (
               <div key={item.name} className="flex items-center gap-2">
                 <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                <span className="text-dark-400 text-sm">{item.name}</span>
+                <span className="text-sm text-gray-600">{item.name}</span>
               </div>
             ))}
           </div>
@@ -325,13 +318,13 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Requests */}
         <motion.div
-          className="bg-dark-800 border border-dark-700 rounded-2xl p-6"
+          className="glass-card p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.6 }}
         >
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-white">Recent Requests</h3>
+            <h3 className="text-lg font-semibold text-gray-900">Recent Requests</h3>
             <button
               onClick={() => navigate('/requests')}
               className="text-primary-500 text-sm hover:underline flex items-center gap-1"
@@ -342,30 +335,30 @@ export default function DashboardPage() {
           </div>
           {recentRequests.length === 0 ? (
             <div className="text-center py-8">
-              <MapPin className="w-10 h-10 text-dark-500 mx-auto mb-3" />
-              <p className="text-dark-400">No recent requests</p>
+              <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-500">No recent requests</p>
             </div>
           ) : (
             <div className="space-y-4">
               {recentRequests.map((request) => (
                 <div
                   key={request.id}
-                  className="flex items-center justify-between p-4 bg-dark-700/30 rounded-xl hover:bg-dark-700/50 transition-colors"
+                  className="flex items-center justify-between p-4 rounded-xl bg-white/70 border border-gray-200/60 hover:shadow-[0_14px_40px_rgba(15,23,42,0.16)] transition-colors"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-dark-600 rounded-full flex items-center justify-center">
+                    <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center shadow-[0_10px_30px_rgba(15,23,42,0.10)]">
                       <MapPin className="w-5 h-5 text-primary-500" />
                     </div>
                     <div>
-                      <p className="text-white font-medium">{request.user_name}</p>
-                      <p className="text-dark-400 text-sm truncate max-w-[200px]">
+                      <p className="text-gray-900 font-medium">{request.user_name}</p>
+                      <p className="text-gray-500 text-sm truncate max-w-[200px]">
                         {request.pickup_location.address}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
                     {getStatusBadge(request.status)}
-                    <p className="text-primary-500 font-medium mt-1">
+                    <p className="text-primary-600 font-medium mt-1">
                       GHS {request.final_price || request.estimated_price}
                     </p>
                   </div>
@@ -377,16 +370,16 @@ export default function DashboardPage() {
 
         {/* Pending Operator Approvals */}
         <motion.div
-          className="bg-dark-800 border border-dark-700 rounded-2xl p-6"
+          className="glass-card p-6"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.7 }}
         >
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <h3 className="text-lg font-semibold text-primary-700">Pending Approvals</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Pending Approvals</h3>
               {pendingOperators.length > 0 && (
-                <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2 py-1 rounded-full">
+                <span className="bg-primary-100 text-primary-700 text-xs font-bold px-2 py-1 rounded-full shadow-[0_10px_30px_rgba(59,130,246,0.35)]">
                   {pendingOperators.length}
                 </span>
               )}
@@ -401,18 +394,18 @@ export default function DashboardPage() {
           </div>
           {pendingOperators.length === 0 ? (
             <div className="text-center py-8">
-              <CheckCircle className="w-10 h-10 text-success mx-auto mb-3" />
-              <p className="text-text-muted">All operators approved</p>
+              <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-3" />
+              <p className="text-gray-500">All operators approved</p>
             </div>
           ) : (
             <div className="space-y-4">
               {pendingOperators.map((operator) => (
                 <div
                   key={operator.id}
-                  className="flex items-center justify-between p-4 bg-primary-50 rounded-xl hover:bg-primary-100 transition-colors"
+                  className="flex items-center justify-between p-4 rounded-xl bg-white/80 border border-primary-100/70 hover:shadow-[0_16px_45px_rgba(15,23,42,0.20)] transition-colors"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center overflow-hidden">
+                    <div className="w-10 h-10 bg-primary-50 rounded-full flex items-center justify-center overflow-hidden shadow-[0_10px_30px_rgba(59,130,246,0.35)]">
                       {operator.profile_photo_url ? (
                         <img
                           src={operator.profile_photo_url}
@@ -424,13 +417,13 @@ export default function DashboardPage() {
                       )}
                     </div>
                     <div>
-                      <p className="text-primary-700 font-medium">{operator.full_name}</p>
-                      <p className="text-text-muted text-sm">{operator.phone}</p>
+                      <p className="text-gray-900 font-medium">{operator.full_name}</p>
+                      <p className="text-gray-500 text-sm">{operator.phone}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => navigate('/operators')}
-                    className="px-4 py-2 bg-primary-100 text-primary-700 rounded-lg text-sm hover:bg-primary-200 transition-colors"
+                    className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm hover:bg-primary-600 transition-colors shadow-[0_14px_40px_rgba(59,130,246,0.55)]"
                   >
                     Review
                   </button>

@@ -275,19 +275,21 @@ export default function RequestsPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Tow Requests</h1>
-          <p className="text-dark-400 mt-1">View and manage all towing requests</p>
+          <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900">
+            Tow Requests
+          </h1>
+          <p className="text-gray-500 mt-1">View and manage all towing requests</p>
         </div>
 
         {/* Stats */}
         <div className="flex gap-3">
-          <div className="bg-dark-800 border border-dark-700 rounded-xl px-4 py-2">
-            <span className="text-dark-400 text-sm">Total: </span>
-            <span className="text-white font-semibold">{requests.length}</span>
+          <div className="glass-card px-4 py-2 flex items-center gap-2">
+            <span className="text-sm text-gray-500">Total:</span>
+            <span className="text-gray-900 font-semibold">{requests.length}</span>
           </div>
-          <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2">
-            <span className="text-green-400 text-sm">Completed: </span>
-            <span className="text-green-400 font-semibold">{statusCounts.completed}</span>
+          <div className="rounded-xl px-4 py-2 bg-green-500/10 border border-green-500/20">
+            <span className="text-sm text-green-600">Completed: </span>
+            <span className="font-semibold text-green-600">{statusCounts.completed}</span>
           </div>
         </div>
       </div>
@@ -304,8 +306,8 @@ export default function RequestsPage() {
             className={cn(
               'px-4 py-2 rounded-xl text-sm font-medium transition-colors',
               statusFilter === status
-                ? 'bg-primary-500 text-dark-900'
-                : 'bg-dark-800 text-dark-300 hover:bg-dark-700'
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             )}
           >
             {status === 'all' ? 'All' : status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
@@ -319,49 +321,49 @@ export default function RequestsPage() {
       {/* Search Bar */}
       <div className="flex gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             placeholder="Search by customer name, location, or request ID..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500 transition-colors"
+            className="input-field pl-12"
           />
         </div>
       </div>
 
       {/* Requests Table */}
-      <div className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-dark-400">Loading requests...</p>
+            <p className="text-gray-500">Loading requests...</p>
           </div>
         ) : filteredRequests.length === 0 ? (
           <div className="p-12 text-center">
-            <MapPin className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-            <p className="text-dark-400">No requests found</p>
+            <MapPin className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">No requests found</p>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-dark-700">
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Customer</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Pickup</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Operator</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Status</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Price</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Time</th>
-                    <th className="text-right py-4 px-6 text-dark-400 font-medium text-sm">Actions</th>
+                  <tr className="border-b border-gray-200">
+                    <th className="table-header px-6 py-4">Customer</th>
+                    <th className="table-header px-6 py-4">Pickup</th>
+                    <th className="table-header px-6 py-4">Operator</th>
+                    <th className="table-header px-6 py-4">Status</th>
+                    <th className="table-header px-6 py-4">Price</th>
+                    <th className="table-header px-6 py-4">Time</th>
+                    <th className="table-header px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedRequests.map((request, index) => (
                     <motion.tr
                       key={request.id}
-                      className="border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors"
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
@@ -369,16 +371,16 @@ export default function RequestsPage() {
                       {/* Customer */}
                       <td className="py-4 px-6">
                         <div>
-                          <p className="text-white font-medium">{request.user_name}</p>
-                          <p className="text-dark-400 text-sm">{request.user_phone}</p>
+                          <p className="text-gray-900 font-medium">{request.user_name}</p>
+                          <p className="text-gray-500 text-sm">{request.user_phone}</p>
                         </div>
                       </td>
 
                       {/* Pickup */}
                       <td className="py-4 px-6">
                         <div className="flex items-start gap-2 max-w-[200px]">
-                          <MapPin className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
-                          <span className="text-dark-300 text-sm truncate">
+                          <MapPin className="w-4 h-4 text-green-500 flex-shrink-0 mt-0.5" />
+                          <span className="text-gray-600 text-sm truncate">
                             {request.pickup_location.address}
                           </span>
                         </div>
@@ -386,9 +388,9 @@ export default function RequestsPage() {
 
                       {/* Operator */}
                       <td className="py-4 px-6">
-                        <span className="text-dark-300">
+                        <span className="text-gray-600">
                           {request.operator_name || (
-                            <span className="text-dark-500 italic">Unassigned</span>
+                            <span className="text-gray-400 italic">Unassigned</span>
                           )}
                         </span>
                       </td>
@@ -400,14 +402,14 @@ export default function RequestsPage() {
 
                       {/* Price */}
                       <td className="py-4 px-6">
-                        <span className="text-primary-500 font-semibold">
+                        <span className="text-primary-600 font-semibold">
                           GHS {request.final_price || request.estimated_price}
                         </span>
                       </td>
 
                       {/* Time */}
                       <td className="py-4 px-6">
-                        <span className="text-dark-400 text-sm">
+                        <span className="text-gray-500 text-sm">
                           {formatTime(request.created_at)}
                         </span>
                       </td>
@@ -417,7 +419,7 @@ export default function RequestsPage() {
                         <div className="flex items-center justify-end">
                           <button
                             onClick={() => handleViewDetails(request)}
-                            className="p-2 hover:bg-dark-600 rounded-lg transition-colors text-dark-400 hover:text-white"
+                            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                             title="View Details"
                           >
                             <Eye className="w-5 h-5" />

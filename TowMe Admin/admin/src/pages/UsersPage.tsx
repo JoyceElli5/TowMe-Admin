@@ -64,15 +64,17 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">User Management</h1>
-          <p className="text-dark-400 mt-1">
+          <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900">
+            User Management
+          </h1>
+          <p className="text-gray-500 mt-1">
             View and manage registered users
           </p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="bg-dark-800 border border-dark-700 rounded-xl px-4 py-2">
-            <span className="text-dark-400 text-sm">Total Users: </span>
-            <span className="text-white font-semibold">{users.length}</span>
+          <div className="glass-card px-4 py-2 flex items-center gap-2">
+            <span className="text-sm text-gray-500">Total Users:</span>
+            <span className="text-gray-900 font-semibold">{users.length}</span>
           </div>
         </div>
       </div>
@@ -80,48 +82,48 @@ export default function UsersPage() {
       {/* Search Bar */}
       <div className="flex gap-4">
         <div className="flex-1 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-400" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             type="text"
             placeholder="Search by name, email, or phone..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-dark-800 border border-dark-700 rounded-xl text-white placeholder-dark-400 focus:outline-none focus:border-primary-500 transition-colors"
+            className="input-field pl-12"
           />
         </div>
       </div>
 
       {/* Users Table */}
-      <div className="bg-dark-800 border border-dark-700 rounded-2xl overflow-hidden">
+      <div className="glass-card overflow-hidden">
         {isLoading ? (
           <div className="p-12 text-center">
             <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-dark-400">Loading users...</p>
+            <p className="text-gray-500">Loading users...</p>
           </div>
         ) : filteredUsers.length === 0 ? (
           <div className="p-12 text-center">
-            <User className="w-12 h-12 text-dark-500 mx-auto mb-4" />
-            <p className="text-dark-400">No users found</p>
+            <User className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <p className="text-gray-500">No users found</p>
           </div>
         ) : (
           <>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-dark-700">
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">User</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Contact</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Status</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Total Trips</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Joined</th>
-                    <th className="text-left py-4 px-6 text-dark-400 font-medium text-sm">Last Active</th>
+                  <tr className="border-b border-gray-200">
+                    <th className="table-header px-6 py-4">User</th>
+                    <th className="table-header px-6 py-4">Contact</th>
+                    <th className="table-header px-6 py-4">Status</th>
+                    <th className="table-header px-6 py-4">Total Trips</th>
+                    <th className="table-header px-6 py-4">Joined</th>
+                    <th className="table-header px-6 py-4">Last Active</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedUsers.map((user, index) => (
                     <motion.tr
                       key={user.id}
-                      className="border-b border-dark-700/50 hover:bg-dark-700/30 transition-colors"
+                      className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.05 }}
@@ -129,7 +131,7 @@ export default function UsersPage() {
                       {/* User Info */}
                       <td className="py-4 px-6">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-dark-700 overflow-hidden flex-shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-gray-100 overflow-hidden flex-shrink-0">
                             {user.avatar_url ? (
                               <img
                                 src={user.avatar_url}
@@ -138,21 +140,21 @@ export default function UsersPage() {
                               />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center">
-                                <User className="w-5 h-5 text-dark-400" />
+                                <User className="w-5 h-5 text-gray-400" />
                               </div>
                             )}
                           </div>
                           <div>
-                            <p className="text-white font-medium">{user.full_name}</p>
-                            <p className="text-dark-400 text-sm">{user.email}</p>
+                            <p className="text-gray-900 font-medium">{user.full_name}</p>
+                            <p className="text-gray-500 text-sm">{user.email}</p>
                           </div>
                         </div>
                       </td>
 
                       {/* Contact */}
                       <td className="py-4 px-6">
-                        <div className="flex items-center gap-2 text-dark-300">
-                          <Phone className="w-4 h-4 text-dark-400" />
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Phone className="w-4 h-4 text-gray-400" />
                           {user.phone || 'N/A'}
                         </div>
                       </td>
@@ -160,12 +162,12 @@ export default function UsersPage() {
                       {/* Status */}
                       <td className="py-4 px-6">
                         {user.is_active ? (
-                          <span className="flex items-center gap-1.5 text-green-400 text-sm">
+                          <span className="flex items-center gap-1.5 text-green-600 text-sm">
                             <CheckCircle className="w-4 h-4" />
                             Active
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1.5 text-dark-400 text-sm">
+                          <span className="flex items-center gap-1.5 text-gray-400 text-sm">
                             <XCircle className="w-4 h-4" />
                             Inactive
                           </span>
@@ -174,20 +176,20 @@ export default function UsersPage() {
 
                       {/* Total Trips */}
                       <td className="py-4 px-6">
-                        <span className="text-white font-medium">{user.total_trips}</span>
-                        <span className="text-dark-400 text-sm"> trips</span>
+                        <span className="text-gray-900 font-medium">{user.total_trips}</span>
+                        <span className="text-gray-500 text-sm"> trips</span>
                       </td>
 
                       {/* Joined Date */}
                       <td className="py-4 px-6">
-                        <span className="text-dark-300 text-sm">
+                        <span className="text-gray-500 text-sm">
                           {formatDate(user.created_at)}
                         </span>
                       </td>
 
                       {/* Last Active */}
                       <td className="py-4 px-6">
-                        <span className="text-dark-300 text-sm">
+                        <span className="text-gray-500 text-sm">
                           {formatTime(user.last_login)}
                         </span>
                       </td>

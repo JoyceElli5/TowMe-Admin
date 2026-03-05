@@ -107,15 +107,15 @@ const getNotificationIcon = (type: Notification['type']) => {
 const getNotificationColor = (type: Notification['type']) => {
   switch (type) {
     case 'operator':
-      return 'bg-blue-500/10 text-blue-500 dark:text-blue-400';
+      return 'bg-blue-500/10 text-blue-500';
     case 'user':
-      return 'bg-green-500/10 text-green-500 dark:text-green-400';
+      return 'bg-green-500/10 text-green-500';
     case 'payment':
       return 'bg-primary-500/10 text-primary-500';
     case 'request':
-      return 'bg-purple-500/10 text-purple-500 dark:text-purple-400';
+      return 'bg-purple-500/10 text-purple-500';
     case 'system':
-      return 'bg-red-500/10 text-red-500 dark:text-red-400';
+      return 'bg-red-500/10 text-red-500';
   }
 };
 
@@ -151,15 +151,15 @@ export default function NotificationsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Notifications</h1>
-          <p className="text-gray-500 dark:text-dark-400 mt-1">
+          <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
+          <p className="text-gray-500 mt-1">
             {unreadCount > 0 ? `You have ${unreadCount} unread notifications` : 'All caught up!'}
           </p>
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={markAllAsRead}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-dark-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors"
           >
             <CheckCheck className="w-4 h-4" />
             Mark all read
@@ -175,14 +175,14 @@ export default function NotificationsPage() {
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-4 border-b border-gray-200 dark:border-dark-700">
+      <div className="flex items-center gap-4 border-b border-gray-200">
         <button
           onClick={() => setFilter('all')}
           className={cn(
             'px-4 py-3 text-sm font-medium border-b-2 transition-colors',
             filter === 'all'
               ? 'border-primary-500 text-primary-500'
-              : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-300'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
           )}
         >
           All ({notifications.length})
@@ -193,7 +193,7 @@ export default function NotificationsPage() {
             'px-4 py-3 text-sm font-medium border-b-2 transition-colors',
             filter === 'unread'
               ? 'border-primary-500 text-primary-500'
-              : 'border-transparent text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-dark-300'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
           )}
         >
           Unread ({unreadCount})
@@ -204,9 +204,9 @@ export default function NotificationsPage() {
       <div className="space-y-3">
         {filteredNotifications.length === 0 ? (
           <div className="glass-card p-12 text-center">
-            <Bell className="w-12 h-12 text-gray-300 dark:text-dark-600 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No notifications</h3>
-            <p className="text-gray-500 dark:text-dark-400">You're all caught up!</p>
+            <Bell className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications</h3>
+            <p className="text-gray-500">You're all caught up!</p>
           </div>
         ) : (
           filteredNotifications.map((notification, index) => {
@@ -219,7 +219,7 @@ export default function NotificationsPage() {
                 transition={{ delay: index * 0.05 }}
                 className={cn(
                   'glass-card p-4 flex items-start gap-4 group',
-                  !notification.read && 'ring-1 ring-primary-500/20 bg-primary-500/5 dark:bg-primary-500/5'
+                  !notification.read && 'ring-1 ring-primary-500/20 bg-primary-500/5'
                 )}
               >
                 {/* Icon */}
@@ -234,15 +234,15 @@ export default function NotificationsPage() {
                       <h3 className={cn(
                         'font-medium',
                         notification.read 
-                          ? 'text-gray-700 dark:text-dark-300' 
-                          : 'text-gray-900 dark:text-white'
+                          ? 'text-gray-700' 
+                          : 'text-gray-900'
                       )}>
                         {notification.title}
                       </h3>
-                      <p className="text-sm text-gray-500 dark:text-dark-400 mt-1">
+                      <p className="text-sm text-gray-500 mt-1">
                         {notification.message}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-dark-500 mt-2">
+                      <p className="text-xs text-gray-400 mt-2">
                         {notification.time}
                       </p>
                     </div>
@@ -259,7 +259,7 @@ export default function NotificationsPage() {
                   {!notification.read && (
                     <button
                       onClick={() => markAsRead(notification.id)}
-                      className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-700 text-gray-500 dark:text-dark-400 hover:text-gray-700 dark:hover:text-white transition-colors"
+                      className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
                       title="Mark as read"
                     >
                       <Check className="w-4 h-4" />
@@ -267,7 +267,7 @@ export default function NotificationsPage() {
                   )}
                   <button
                     onClick={() => deleteNotification(notification.id)}
-                    className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-500/10 text-gray-500 dark:text-dark-400 hover:text-red-500 transition-colors"
+                    className="p-2 rounded-lg hover:bg-red-50 text-gray-500 hover:text-red-500 transition-colors"
                     title="Delete"
                   >
                     <Trash2 className="w-4 h-4" />

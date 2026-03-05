@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase configuration from environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://placeholder.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-key';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://tjfwllmnisrkaqnyspoi.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqZndsbG1uaXNya2FxbnlzcG9pIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ1MjA0NDIsImV4cCI6MjA4MDA5NjQ0Mn0.CuYVpZ9SWxUSO8XfBu22atLgpsWnG8rfwU4hnvjri7Y';
 
 // Check if we're in demo mode (no real credentials)
-export const isDemoMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
+export const isDemoMode = !supabaseUrl || !supabaseAnonKey;
 
 if (isDemoMode) {
   console.warn('Running in demo mode. Supabase URL or Anon Key is missing. Check your .env file.');

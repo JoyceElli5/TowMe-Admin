@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Eye, EyeOff, Truck, AlertCircle, Loader2 } from 'lucide-react';
+import { CirclePasswordIcon, LockPasswordIcon, Alert01Icon, Car01Icon, Loading01Icon, EyeIcon } from 'hugeicons-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -155,7 +155,7 @@ export default function LoginPage() {
   if (authLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+        <Loading01Icon className="w-8 h-8 text-primary-500 animate-spin" />
       </div>
     );
   }
@@ -213,7 +213,7 @@ export default function LoginPage() {
           transition={{ repeat: Infinity, duration: 3 }}
         >
           <div className="w-14 h-14 bg-primary-500 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/30">
-            <Truck className="w-8 h-8 text-white" />
+            <Car01Icon className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-4xl font-bold text-gray-900">
             Tow<span className="text-primary-500">Me</span>
@@ -241,7 +241,7 @@ export default function LoginPage() {
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                 >
-                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                  <Alert01Icon className="w-5 h-5 text-red-500 flex-shrink-0" />
                   <p className="text-red-400 text-sm">{error}</p>
                 </motion.div>
               )}
@@ -280,7 +280,7 @@ export default function LoginPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
                     >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      {showPassword ? <EyeIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
                     </button>
                   </div>
                   {errors.password && (
@@ -295,7 +295,7 @@ export default function LoginPage() {
                 >
                   {isSubmitting ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <Loading01Icon className="w-5 h-5 animate-spin" />
                       Signing in...
                     </>
                   ) : (
