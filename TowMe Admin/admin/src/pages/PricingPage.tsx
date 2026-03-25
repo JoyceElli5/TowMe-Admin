@@ -11,10 +11,14 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  History,
+  CalendarClock,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { pricingApi } from '../lib/api';
-import type { PricingConfig } from '../types';
+import type { PricingConfig, PricingVersion } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { logAuditEvent } from '../lib/audit';
 
 // Vehicle icon mapping
 const vehicleIcons: Record<string, React.ElementType> = {
@@ -109,11 +113,31 @@ const PricingCard = ({
         </div>
       </div>
 
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        <div className="bg-dark-700/40 rounded-lg p-2">
+          <p className="text-dark-400 text-xs">Service Fee</p>
+          <p className="text-white text-sm font-medium">GHS {pricing.service_fee ?? 0}</p>
+        </div>
+        <div className="bg-dark-700/40 rounded-lg p-2">
+          <p className="text-dark-400 text-xs">Surge x</p>
+          <p className="text-white text-sm font-medium">{pricing.surge_multiplier ?? 1}</p>
+        </div>
+        <div className="bg-dark-700/40 rounded-lg p-2">
+          <p className="text-dark-400 text-xs">Zone x</p>
+          <p className="text-white text-sm font-medium">{pricing.zone_multiplier ?? 1}</p>
+        </div>
+      </div>
+
       <div className="mt-4 pt-4 border-t border-dark-700">
         <p className="text-dark-400 text-sm">Example: 10 km trip</p>
         <p className="text-primary-500 font-semibold">
-          GHS {pricing.base_fee + pricing.per_km_rate * 10}
+          GHS {(pricing.base_fee + pricing.per_km_rate * 10 + (pricing.service_fee ?? 0)) * (pricing.surge_multiplier ?? 1) * (pricing.zone_multiplier ?? 1)}
         </p>
+        {pricing.effective_from && (
+          <p className="text-dark-400 text-xs mt-2">
+            Effective {new Date(pricing.effective_from).toLocaleString()}
+          </p>
+        )}
       </div>
     </motion.div>
   );
@@ -135,6 +159,10 @@ const EditPricingModal = ({
 }) => {
   const [baseFee, setBaseFee] = useState(pricing?.base_fee || 0);
   const [perKmRate, setPerKmRate] = useState(pricing?.per_km_rate || 0);
+  const [serviceFee, setServiceFee] = useState(pricing?.service_fee || 0);
+  const [surgeMultiplier, setSurgeMultiplier] = useState(pricing?.surge_multiplier || 1);
+  const [zoneMultiplier, setZoneMultiplier] = useState(pricing?.zone_multiplier || 1);
+  const [effectiveFromLocal, setEffectiveFromLocal] = useState('');
   const [isActive, setIsActive] = useState(pricing?.is_active ?? true);
 
   // Reset form when pricing changes
@@ -142,6 +170,11 @@ const EditPricingModal = ({
     if (pricing) {
       setBaseFee(pricing.base_fee);
       setPerKmRate(pricing.per_km_rate);
+      setServiceFee(pricing.service_fee || 0);
+      setSurgeMultiplier(pricing.surge_multiplier || 1);
+      setZoneMultiplier(pricing.zone_multiplier || 1);
+      const effective = pricing.effective_from ? new Date(pricing.effective_from) : new Date();
+      setEffectiveFromLocal(new Date(effective.getTime() - effective.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
       setIsActive(pricing.is_active);
     }
   }, [pricing]);
@@ -151,9 +184,15 @@ const EditPricingModal = ({
   const Icon = vehicleIcons[pricing.vehicle_type] || Car;
 
   const handleSave = () => {
+    const effectiveFromIso = effectiveFromLocal ? new Date(effectiveFromLocal).toISOString() : new Date().toISOString();
+
     onSave({
       base_fee: baseFee,
       per_km_rate: perKmRate,
+      service_fee: serviceFee,
+      surge_multiplier: surgeMultiplier,
+      zone_multiplier: zoneMultiplier,
+      effective_from: effectiveFromIso,
       is_active: isActive,
     });
   };
@@ -194,6 +233,45 @@ const EditPricingModal = ({
             <div className="space-y-4">
               <PriceInput label="Base Fee" value={baseFee} onChange={setBaseFee} />
               <PriceInput label="Per KM Rate" value={perKmRate} onChange={setPerKmRate} />
+              <PriceInput label="Service Fee" value={serviceFee} onChange={setServiceFee} />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-dark-400 text-sm mb-2">Surge Multiplier</label>
+                  <input
+                    type="number"
+                    value={surgeMultiplier}
+                    onChange={(e) => setSurgeMultiplier(parseFloat(e.target.value) || 1)}
+                    min="1"
+                    step="0.1"
+                    className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-dark-400 text-sm mb-2">Zone Multiplier</label>
+                  <input
+                    type="number"
+                    value={zoneMultiplier}
+                    onChange={(e) => setZoneMultiplier(parseFloat(e.target.value) || 1)}
+                    min="1"
+                    step="0.1"
+                    className="w-full px-4 py-3 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-dark-400 text-sm mb-2">Effective From</label>
+                <div className="relative">
+                  <CalendarClock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dark-400" />
+                  <input
+                    type="datetime-local"
+                    value={effectiveFromLocal}
+                    onChange={(e) => setEffectiveFromLocal(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-dark-700 border border-dark-600 rounded-xl text-white focus:outline-none focus:border-primary-500 transition-colors"
+                  />
+                </div>
+              </div>
 
               {/* Active Toggle */}
               <div className="flex items-center justify-between py-3">
@@ -219,15 +297,15 @@ const EditPricingModal = ({
                 <div className="grid grid-cols-3 gap-2 text-sm">
                   <div>
                     <p className="text-dark-500">5 km</p>
-                    <p className="text-white font-medium">GHS {baseFee + perKmRate * 5}</p>
+                    <p className="text-white font-medium">GHS {(baseFee + perKmRate * 5 + serviceFee) * surgeMultiplier * zoneMultiplier}</p>
                   </div>
                   <div>
                     <p className="text-dark-500">10 km</p>
-                    <p className="text-white font-medium">GHS {baseFee + perKmRate * 10}</p>
+                    <p className="text-white font-medium">GHS {(baseFee + perKmRate * 10 + serviceFee) * surgeMultiplier * zoneMultiplier}</p>
                   </div>
                   <div>
                     <p className="text-dark-500">20 km</p>
-                    <p className="text-white font-medium">GHS {baseFee + perKmRate * 20}</p>
+                    <p className="text-white font-medium">GHS {(baseFee + perKmRate * 20 + serviceFee) * surgeMultiplier * zoneMultiplier}</p>
                   </div>
                 </div>
               </div>
@@ -271,7 +349,9 @@ export default function PricingPage() {
   const [selectedPricing, setSelectedPricing] = useState<PricingConfig | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+  const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
+  const canManagePricing = hasPermission('pricing.manage');
 
   // Fetch pricing
   const { data: pricingList = [], isLoading } = useQuery({
@@ -279,24 +359,47 @@ export default function PricingPage() {
     queryFn: pricingApi.getAll,
   });
 
+  const { data: pricingVersions = [] } = useQuery({
+    queryKey: ['pricing-versions'],
+    queryFn: () => pricingApi.getVersions(),
+  });
+
   // Update pricing mutation
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<PricingConfig> }) =>
       pricingApi.update(id, data),
-    onSuccess: () => {
+    onSuccess: async (_, variables) => {
+      const pricingBefore = pricingList.find((item) => item.id === variables.id);
+
+      await logAuditEvent({
+        action: 'pricing.update',
+        resourceType: 'pricing_rule',
+        resourceId: variables.id,
+        before: pricingBefore,
+        after: variables.data,
+        metadata: {
+          source: 'admin-web',
+        },
+      });
+
       queryClient.invalidateQueries({ queryKey: ['pricing'] });
+      queryClient.invalidateQueries({ queryKey: ['pricing-versions'] });
       setIsEditModalOpen(false);
       setSelectedPricing(null);
     },
   });
 
   const handleEdit = (pricing: PricingConfig) => {
+    if (!canManagePricing) {
+      return;
+    }
+
     setSelectedPricing(pricing);
     setIsEditModalOpen(true);
   };
 
   const handleSave = (data: Partial<PricingConfig>) => {
-    if (selectedPricing) {
+    if (selectedPricing && canManagePricing) {
       updateMutation.mutate({ id: selectedPricing.id, data });
     }
   };
@@ -351,6 +454,34 @@ export default function PricingPage() {
         onSave={handleSave}
         isLoading={updateMutation.isPending}
       />
+
+      {/* Version History */}
+      <div className="glass-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <History className="w-5 h-5 text-primary-500" />
+          <h3 className="text-lg font-semibold text-gray-900">Pricing Version History</h3>
+        </div>
+        {pricingVersions.length === 0 ? (
+          <p className="text-gray-500 text-sm">No pricing versions recorded yet.</p>
+        ) : (
+          <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+            {pricingVersions.slice(0, 30).map((version: PricingVersion) => (
+              <div key={version.id} className="rounded-xl bg-dark-700/40 p-3 border border-dark-600/50">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-white font-medium">{version.vehicle_type}</p>
+                  <span className="text-xs text-dark-300">{new Date(version.changed_at).toLocaleString()}</span>
+                </div>
+                <p className="text-sm text-dark-300 mt-1">
+                  Base GHS {version.base_fee} | Per KM GHS {version.per_km_rate} | Service GHS {version.service_fee ?? 0} | Surge x{version.surge_multiplier ?? 1} | Zone x{version.zone_multiplier ?? 1}
+                </p>
+                <p className="text-xs text-dark-400 mt-1">
+                  Effective from {new Date(version.effective_from).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

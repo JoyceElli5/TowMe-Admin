@@ -18,6 +18,7 @@ import {
 } from 'hugeicons-react';
 import { useAuth } from '../contexts/AuthContext';
 import { cn } from '../lib/utils';
+import type { AdminPermission } from '../lib/rbac';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -25,18 +26,18 @@ interface SidebarProps {
 }
 
 const menuItems = [
-  { icon: DashboardSquare01Icon, label: 'Dashboard', path: '/dashboard' },
-  { icon: Car01Icon, label: 'Operators', path: '/operators' },
-  { icon: UserAccountIcon, label: 'Users', path: '/users' },
-  { icon: Location01Icon, label: 'Requests', path: '/requests' },
-  { icon: MoneySend01Icon, label: 'Pricing', path: '/pricing' },
-  { icon: GiftCardIcon, label: 'Payments', path: '/payments' },
-  { icon: Notification01Icon, label: 'Notifications', path: '/notifications' },
-  { icon: Message01Icon, label: 'Support', path: '/support' },
+  { icon: DashboardSquare01Icon, label: 'Dashboard', path: '/dashboard', permission: 'dashboard.view' as AdminPermission },
+  { icon: Car01Icon, label: 'Operators', path: '/operators', permission: 'operators.view' as AdminPermission },
+  { icon: UserAccountIcon, label: 'Users', path: '/users', permission: 'users.view' as AdminPermission },
+  { icon: Location01Icon, label: 'Requests', path: '/requests', permission: 'requests.view' as AdminPermission },
+  { icon: MoneySend01Icon, label: 'Pricing', path: '/pricing', permission: 'pricing.view' as AdminPermission },
+  { icon: GiftCardIcon, label: 'Payments', path: '/payments', permission: 'finance.view' as AdminPermission },
+  { icon: Notification01Icon, label: 'Notifications', path: '/notifications', permission: 'notifications.view' as AdminPermission },
+  { icon: Message01Icon, label: 'Support', path: '/support', permission: 'support.view' as AdminPermission },
 ];
 
 const bottomItems = [
-  { icon: Settings01Icon, label: 'Settings', path: '/settings' },
+  { icon: Settings01Icon, label: 'Settings', path: '/settings', permission: 'settings.view' as AdminPermission },
 ];
 
 // Navigation item animation variants
@@ -56,7 +57,7 @@ const labelVariants = {
 };
 
 export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
-  const { adminUser, signOut } = useAuth();
+  const { adminUser, signOut, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -133,7 +134,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto relative">
-        {menuItems.map((item, index) => {
+        {menuItems.filter((item) => hasPermission(item.permission)).map((item, index) => {
           const isActive = location.pathname === item.path;
           
           return (
@@ -209,7 +210,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Bottom Section */}
       <div className="p-4 border-t border-gray-200 space-y-1 relative">
-        {bottomItems.map((item) => {
+        {bottomItems.filter((item) => hasPermission(item.permission)).map((item) => {
           const isActive = location.pathname === item.path;
           
           return (

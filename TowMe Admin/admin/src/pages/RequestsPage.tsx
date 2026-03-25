@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   MapPin,
@@ -16,10 +16,16 @@ import {
   X,
   AlertCircle,
   PlayCircle,
+  Flag,
+  ShieldAlert,
+  Siren,
+  RefreshCw,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { requestsApi } from '../lib/api';
-import type { TowRequest, RequestStatus } from '../types';
+import type { TowRequest, RequestStatus, RequestInterventionAction } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { logAuditEvent } from '../lib/audit';
 
 type FilterStatus = 'all' | RequestStatus;
 
@@ -52,10 +58,16 @@ const RequestDetailModal = ({
   isOpen,
   onClose,
   request,
+  canIntervene,
+  isIntervening,
+  onIntervene,
 }: {
   isOpen: boolean;
   onClose: () => void;
   request: TowRequest | null;
+  canIntervene: (action: RequestInterventionAction) => boolean;
+  isIntervening: boolean;
+  onIntervene: (action: RequestInterventionAction) => void;
 }) => {
   if (!request) return null;
 
@@ -195,6 +207,74 @@ const RequestDetailModal = ({
                 </div>
               </div>
 
+              {/* Intervention Flags */}
+              {(request.is_escalated || request.is_fraud_suspected || request.emergency_override) && (
+                <div className="bg-dark-700/50 rounded-xl p-4">
+                  <h3 className="text-white font-medium mb-3">Intervention Flags</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {request.is_escalated && (
+                      <span className="px-2.5 py-1 rounded-full text-xs bg-yellow-500/20 text-yellow-300">Escalated</span>
+                    )}
+                    {request.is_fraud_suspected && (
+                      <span className="px-2.5 py-1 rounded-full text-xs bg-red-500/20 text-red-300">Fraud Suspected</span>
+                    )}
+                    {request.emergency_override && (
+                      <span className="px-2.5 py-1 rounded-full text-xs bg-blue-500/20 text-blue-300">Emergency Override</span>
+                    )}
+                  </div>
+                  {request.intervention_notes && (
+                    <p className="text-dark-300 text-sm mt-3">{request.intervention_notes}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Admin Interventions */}
+              <div className="bg-dark-700/50 rounded-xl p-4">
+                <h3 className="text-white font-medium mb-3">Admin Interventions</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    onClick={() => onIntervene('cancel')}
+                    disabled={!canIntervene('cancel') || isIntervening}
+                    className="px-3 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Cancel Request
+                  </button>
+                  <button
+                    onClick={() => onIntervene('reassign')}
+                    disabled={!canIntervene('reassign') || isIntervening}
+                    className="px-3 py-2 rounded-lg bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Reassign Operator
+                  </button>
+                  <button
+                    onClick={() => onIntervene('escalate')}
+                    disabled={!canIntervene('escalate') || isIntervening}
+                    className="px-3 py-2 rounded-lg bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+                  >
+                    <Flag className="w-4 h-4" />
+                    Escalate
+                  </button>
+                  <button
+                    onClick={() => onIntervene('mark_fraud')}
+                    disabled={!canIntervene('mark_fraud') || isIntervening}
+                    className="px-3 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+                  >
+                    <ShieldAlert className="w-4 h-4" />
+                    Mark Fraud
+                  </button>
+                  <button
+                    onClick={() => onIntervene('emergency_override')}
+                    disabled={!canIntervene('emergency_override') || isIntervening}
+                    className="sm:col-span-2 px-3 py-2 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 disabled:opacity-40 disabled:cursor-not-allowed text-sm flex items-center justify-center gap-2"
+                  >
+                    <Siren className="w-4 h-4" />
+                    Emergency Override
+                  </button>
+                </div>
+              </div>
+
               {/* Cancellation Reason */}
               {request.cancellation_reason && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4">
@@ -220,11 +300,49 @@ export default function RequestsPage() {
   const [selectedRequest, setSelectedRequest] = useState<TowRequest | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const itemsPerPage = 10;
+  const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canInterveneRequests = hasPermission('requests.intervene');
 
   // Fetch requests
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['requests'],
     queryFn: requestsApi.getAll,
+  });
+
+  const interventionMutation = useMutation({
+    mutationFn: ({
+      request,
+      action,
+      payload,
+    }: {
+      request: TowRequest;
+      action: RequestInterventionAction;
+      payload?: {
+        reason?: string;
+        note?: string;
+        operator_id?: string;
+        operator_name?: string;
+      };
+    }) => requestsApi.intervene(request.id, action, payload),
+    onSuccess: async (_, variables) => {
+      await logAuditEvent({
+        action: `requests.${variables.action}`,
+        resourceType: 'tow_request',
+        resourceId: variables.request.id,
+        before: {
+          status: variables.request.status,
+          operator_id: variables.request.operator_id,
+          operator_name: variables.request.operator_name,
+        },
+        after: variables.payload,
+        metadata: {
+          source: 'admin-web',
+        },
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['requests'] });
+    },
   });
 
   // Filter requests
@@ -268,6 +386,50 @@ export default function RequestsPage() {
   const handleViewDetails = (request: TowRequest) => {
     setSelectedRequest(request);
     setIsDetailModalOpen(true);
+  };
+
+  const canInterveneAction = (request: TowRequest, action: RequestInterventionAction) => {
+    if (!canInterveneRequests) return false;
+    return requestsApi.canIntervene(request, action);
+  };
+
+  const handleIntervention = (action: RequestInterventionAction) => {
+    if (!selectedRequest || !canInterveneAction(selectedRequest, action)) {
+      return;
+    }
+
+    let payload: {
+      reason?: string;
+      note?: string;
+      operator_id?: string;
+      operator_name?: string;
+    } = {};
+
+    if (action === 'cancel') {
+      if (!window.confirm('Cancel this request? This action will stop active processing.')) {
+        return;
+      }
+      const reason = window.prompt('Cancellation reason:', 'Cancelled by admin') || 'Cancelled by admin';
+      payload = { reason };
+    }
+
+    if (action === 'reassign') {
+      const operatorName = window.prompt('Enter new operator name:');
+      if (!operatorName) return;
+      const operatorId = window.prompt('Enter new operator ID (optional):') || undefined;
+      payload = { operator_name: operatorName, operator_id: operatorId };
+    }
+
+    if (action === 'escalate' || action === 'mark_fraud' || action === 'emergency_override') {
+      const note = window.prompt('Add intervention note (optional):') || undefined;
+      payload = { note };
+    }
+
+    interventionMutation.mutate({
+      request: selectedRequest,
+      action,
+      payload,
+    });
   };
 
   return (
@@ -496,6 +658,9 @@ export default function RequestsPage() {
           setSelectedRequest(null);
         }}
         request={selectedRequest}
+        canIntervene={(action) => (selectedRequest ? canInterveneAction(selectedRequest, action) : false)}
+        isIntervening={interventionMutation.isPending}
+        onIntervene={handleIntervention}
       />
     </div>
   );

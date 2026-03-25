@@ -3,6 +3,8 @@ import type { User, Session } from '@supabase/supabase-js';
 import { supabase, isDemoMode } from '../lib/supabase';
 import { backendApi } from '../lib/backend-api';
 import type { AdminUser, AdminRole } from '../types';
+import type { AdminPermission } from '../lib/rbac';
+import { roleHasAnyPermission, roleHasPermission } from '../lib/rbac';
 
 interface AuthContextType {
   user: User | null;
@@ -12,6 +14,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   isAuthorized: (allowedRoles?: AdminRole[]) => boolean;
+  hasPermission: (permission: AdminPermission) => boolean;
+  hasAnyPermission: (permissions: AdminPermission[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -134,7 +138,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           id: response.data.user.id,
           email: response.data.user.email,
           name: 'Admin',
-          role: 'super_admin',
+          role: (response.data.user.role as AdminRole) || 'super_admin',
           avatar_url: null,
           created_at: new Date().toISOString(),
           last_login: new Date().toISOString(),
@@ -215,6 +219,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return allowedRoles.includes(adminUser.role);
   };
 
+  const hasPermission = (permission: AdminPermission) => {
+    if (!adminUser) return false;
+    return roleHasPermission(adminUser.role, permission);
+  };
+
+  const hasAnyPermission = (permissions: AdminPermission[]) => {
+    if (!adminUser) return false;
+    return roleHasAnyPermission(adminUser.role, permissions);
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -225,6 +239,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signIn,
         signOut,
         isAuthorized,
+        hasPermission,
+        hasAnyPermission,
       }}
     >
       {children}

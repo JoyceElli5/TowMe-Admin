@@ -16,8 +16,10 @@ import NotificationsPage from './pages/NotificationsPage';
 import PaymentsPage from './pages/PaymentsPage';
 import SupportPage from './pages/SupportPage';
 import SettingsPage from './pages/SettingsPage';
+import UnauthorizedPage from './pages/UnauthorizedPage';
 import DashboardLayout from './components/DashboardLayout';
 import PageTransition from './components/PageTransition';
+import type { AdminPermission } from './lib/rbac';
 
 const queryClient = new QueryClient();
 
@@ -35,6 +37,22 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
+
+const AuthorizedRoute = ({
+  permission,
+  children,
+}: {
+  permission: AdminPermission;
+  children: React.ReactNode;
+}) => {
+  const { hasPermission } = useAuth();
+
+  if (!hasPermission(permission)) {
+    return <Navigate to="/unauthorized" replace />;
   }
 
   return <>{children}</>;
@@ -87,15 +105,79 @@ function AnimatedRoutes() {
             </ProtectedRoute>
           }
         >
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="operators" element={<OperatorsPage />} />
-          <Route path="users" element={<UsersPage />} />
-          <Route path="requests" element={<RequestsPage />} />
-          <Route path="pricing" element={<PricingPage />} />
-          <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="payments" element={<PaymentsPage />} />
-          <Route path="support" element={<SupportPage />} />
-          <Route path="settings" element={<SettingsPage />} />
+          <Route
+            path="dashboard"
+            element={
+              <AuthorizedRoute permission="dashboard.view">
+                <DashboardPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="operators"
+            element={
+              <AuthorizedRoute permission="operators.view">
+                <OperatorsPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="users"
+            element={
+              <AuthorizedRoute permission="users.view">
+                <UsersPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="requests"
+            element={
+              <AuthorizedRoute permission="requests.view">
+                <RequestsPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="pricing"
+            element={
+              <AuthorizedRoute permission="pricing.view">
+                <PricingPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="notifications"
+            element={
+              <AuthorizedRoute permission="notifications.view">
+                <NotificationsPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="payments"
+            element={
+              <AuthorizedRoute permission="finance.view">
+                <PaymentsPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="support"
+            element={
+              <AuthorizedRoute permission="support.view">
+                <SupportPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="settings"
+            element={
+              <AuthorizedRoute permission="settings.view">
+                <SettingsPage />
+              </AuthorizedRoute>
+            }
+          />
+          <Route path="unauthorized" element={<UnauthorizedPage />} />
         </Route>
         
         <Route path="*" element={<Navigate to="/" replace />} />

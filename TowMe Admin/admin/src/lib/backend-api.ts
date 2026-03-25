@@ -140,6 +140,23 @@ class BackendApi {
     });
   }
 
+  async moderateUser(
+    id: string,
+    action: 'soft_ban' | 'permanent_ban' | 'unblock',
+    payload?: { reason?: string }
+  ) {
+    return this.request<any>(`/admin/users/${id}/moderation`, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...(payload || {}) }),
+    });
+  }
+
+  async resetUserAuth(id: string) {
+    return this.request<any>(`/admin/users/${id}/reset-auth`, {
+      method: 'POST',
+    });
+  }
+
   // ============================================================================
   // REQUESTS
   // ============================================================================
@@ -152,6 +169,17 @@ class BackendApi {
 
     const query = queryParams.toString();
     return this.request<any[]>(`/admin/requests${query ? `?${query}` : ''}`);
+  }
+
+  async interveneRequest(
+    id: string,
+    action: 'cancel' | 'reassign' | 'escalate' | 'mark_fraud' | 'emergency_override',
+    payload?: Record<string, unknown>
+  ) {
+    return this.request<any>(`/admin/requests/${id}/interventions`, {
+      method: 'POST',
+      body: JSON.stringify({ action, ...(payload || {}) }),
+    });
   }
 
   // ============================================================================
@@ -175,6 +203,33 @@ class BackendApi {
     });
   }
 
+  async getPricingVersions(params?: { pricingId?: string; vehicleType?: string }) {
+    const queryParams = new URLSearchParams();
+    if (params?.pricingId) queryParams.append('pricing_id', params.pricingId);
+    if (params?.vehicleType) queryParams.append('vehicle_type', params.vehicleType);
+    const query = queryParams.toString();
+
+    return this.request<any[]>(`/admin/pricing/versions${query ? `?${query}` : ''}`);
+  }
+
+  async createPricingVersion(
+    pricingId: string,
+    payload: {
+      base_fee: number;
+      per_km_rate: number;
+      service_fee?: number;
+      surge_multiplier?: number;
+      zone_multiplier?: number;
+      effective_from: string;
+      is_active?: boolean;
+    }
+  ) {
+    return this.request<any>(`/admin/pricing/${pricingId}/versions`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   // ============================================================================
   // PAYMENTS
   // ============================================================================
@@ -187,6 +242,130 @@ class BackendApi {
 
     const query = queryParams.toString();
     return this.request<any[]>(`/admin/payments${query ? `?${query}` : ''}`);
+  }
+
+  async getPaymentLedger(params?: { type?: string; status?: string; search?: string; page?: number; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params?.type) queryParams.append('type', params.type);
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+    const query = queryParams.toString();
+    return this.request<any[]>(`/admin/finance/ledger${query ? `?${query}` : ''}`);
+  }
+
+  async requestRefund(
+    paymentId: string,
+    payload: { amount: number; reason?: string }
+  ) {
+    return this.request<any>(`/admin/finance/refunds`, {
+      method: 'POST',
+      body: JSON.stringify({ payment_id: paymentId, ...payload }),
+    });
+  }
+
+  async approveRefund(refundId: string, payload?: { note?: string }) {
+    return this.request<any>(`/admin/finance/refunds/${refundId}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  async rejectRefund(refundId: string, payload?: { reason?: string }) {
+    return this.request<any>(`/admin/finance/refunds/${refundId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  // ============================================================================
+  // SUPPORT & DISPUTES
+  // ============================================================================
+
+  async getSupportTickets(params?: {
+    status?: string;
+    priority?: string;
+    category?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.priority) queryParams.append('priority', params.priority);
+    if (params?.category) queryParams.append('category', params.category);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+    const query = queryParams.toString();
+    return this.request<any[]>(`/admin/support/tickets${query ? `?${query}` : ''}`);
+  }
+
+  async updateSupportTicket(
+    ticketId: string,
+    payload: {
+      status?: 'open' | 'in_progress' | 'resolved' | 'closed';
+      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      assigned_to?: string;
+      assigned_to_name?: string;
+      sla_due_at?: string;
+      resolution_summary?: string;
+    }
+  ) {
+    return this.request<any>(`/admin/support/tickets/${ticketId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async addSupportReply(
+    ticketId: string,
+    payload: {
+      message: string;
+      is_internal?: boolean;
+      author_id?: string;
+    }
+  ) {
+    return this.request<any>(`/admin/support/tickets/${ticketId}/replies`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async resolveDispute(
+    disputeId: string,
+    payload: {
+      decision: 'approve_refund' | 'reject_claim' | 'partial_refund' | 'operator_penalty' | 'no_action';
+      note?: string;
+      refund_amount?: number;
+    }
+  ) {
+    return this.request<any>(`/admin/support/disputes/${disputeId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // ============================================================================
+  // AUDIT LOGGING
+  // ============================================================================
+
+  async logAuditEvent(payload: {
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    timestamp: string;
+    before?: unknown;
+    after?: unknown;
+    metadata?: Record<string, unknown>;
+  }) {
+    return this.request<any>('/admin/audit-logs', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 }
 

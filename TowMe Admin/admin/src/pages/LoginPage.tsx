@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { CirclePasswordIcon, LockPasswordIcon, Alert01Icon, Car01Icon, Loading01Icon, EyeIcon } from 'hugeicons-react';
+import { Alert01Icon, Car01Icon, Loading01Icon, EyeIcon } from 'hugeicons-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 

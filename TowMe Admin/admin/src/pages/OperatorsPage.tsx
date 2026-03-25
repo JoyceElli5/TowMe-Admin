@@ -20,8 +20,11 @@ import {
 import { cn } from '../lib/utils';
 import { operatorsApi } from '../lib/api';
 import type { Operator } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { logAuditEvent } from '../lib/audit';
 
-type OperatorStatus = 'all' | 'pending' | 'approved' | 'rejected';
+type OperatorStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'suspended';
+type OperatorAction = 'approve' | 'reject' | 'suspend' | 'reactivate';
 
 // Status badge component
 const StatusBadge = ({ status }: { status: string }) => {
@@ -191,11 +194,56 @@ const ApprovalModal = ({
   isOpen: boolean;
   onClose: () => void;
   operator: Operator | null;
-  action: 'approve' | 'reject';
+  action: OperatorAction;
   onConfirm: () => void;
   isLoading: boolean;
 }) => {
   if (!operator) return null;
+
+  const actionConfig: Record<OperatorAction, {
+    title: string;
+    description: string;
+    iconBg: string;
+    icon: React.ElementType;
+    buttonClass: string;
+    buttonText: string;
+  }> = {
+    approve: {
+      title: 'Approve Operator',
+      description: 'They will be able to receive tow requests.',
+      iconBg: 'bg-green-500/20',
+      icon: CheckCircle,
+      buttonClass: 'bg-green-500 text-white hover:bg-green-600',
+      buttonText: 'Approve',
+    },
+    reject: {
+      title: 'Reject Operator',
+      description: 'Their application will be rejected.',
+      iconBg: 'bg-red-500/20',
+      icon: XCircle,
+      buttonClass: 'bg-red-500 text-white hover:bg-red-600',
+      buttonText: 'Reject',
+    },
+    suspend: {
+      title: 'Suspend Operator',
+      description: 'They will not be able to receive new tow requests until reactivated.',
+      iconBg: 'bg-orange-500/20',
+      icon: AlertTriangle,
+      buttonClass: 'bg-orange-500 text-white hover:bg-orange-600',
+      buttonText: 'Suspend',
+    },
+    reactivate: {
+      title: 'Reactivate Operator',
+      description: 'They will be restored to active approved status.',
+      iconBg: 'bg-blue-500/20',
+      icon: CheckCircle,
+      buttonClass: 'bg-blue-500 text-white hover:bg-blue-600',
+      buttonText: 'Reactivate',
+    },
+  };
+
+  const config = actionConfig[action];
+  const ActionIcon = config.icon;
 
   return (
     <AnimatePresence>
@@ -215,22 +263,17 @@ const ApprovalModal = ({
           >
             <div className={cn(
               'w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4',
-              action === 'approve' ? 'bg-green-500/20' : 'bg-red-500/20'
+              config.iconBg
             )}>
-              {action === 'approve' ? (
-                <CheckCircle className="w-8 h-8 text-green-400" />
-              ) : (
-                <XCircle className="w-8 h-8 text-red-400" />
-              )}
+              <ActionIcon className="w-8 h-8 text-white" />
             </div>
             <h3 className="text-xl font-semibold text-white text-center mb-2">
-              {action === 'approve' ? 'Approve Operator' : 'Reject Operator'}
+              {config.title}
             </h3>
             <p className="text-dark-400 text-center mb-6">
               Are you sure you want to {action} <span className="text-white font-medium">{operator.full_name}</span>?
-              {action === 'approve'
-                ? ' They will be able to receive tow requests.'
-                : ' Their application will be rejected.'}
+              {' '}
+              {config.description}
             </p>
             <div className="flex gap-3">
               <button
@@ -245,12 +288,10 @@ const ApprovalModal = ({
                 disabled={isLoading}
                 className={cn(
                   'flex-1 py-3 px-4 rounded-xl font-medium transition-colors disabled:opacity-50',
-                  action === 'approve'
-                    ? 'bg-green-500 text-white hover:bg-green-600'
-                    : 'bg-red-500 text-white hover:bg-red-600'
+                  config.buttonClass
                 )}
               >
-                {isLoading ? 'Processing...' : action === 'approve' ? 'Approve' : 'Reject'}
+                {isLoading ? 'Processing...' : config.buttonText}
               </button>
             </div>
           </motion.div>
@@ -266,9 +307,12 @@ export default function OperatorsPage() {
   const [selectedOperator, setSelectedOperator] = useState<Operator | null>(null);
   const [isDocModalOpen, setIsDocModalOpen] = useState(false);
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
-  const [approvalAction, setApprovalAction] = useState<'approve' | 'reject'>('approve');
+  const [approvalAction, setApprovalAction] = useState<OperatorAction>('approve');
 
+  const { hasPermission } = useAuth();
   const queryClient = useQueryClient();
+  const canVerifyOperators = hasPermission('operators.verify');
+  const canSuspendOperators = hasPermission('operators.suspend');
 
   // Fetch operators
   const { data: operators = [], isLoading } = useQuery({
@@ -278,9 +322,37 @@ export default function OperatorsPage() {
 
   // Update status mutation
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: 'approved' | 'rejected' }) =>
-      operatorsApi.updateStatus(id, status),
-    onSuccess: () => {
+    mutationFn: ({
+      id,
+      status,
+      currentStatus,
+    }: {
+      id: string;
+      status: 'approved' | 'rejected' | 'suspended';
+      currentStatus: Operator['status'];
+      action: OperatorAction;
+    }) => operatorsApi.updateStatus(id, status, currentStatus),
+    onSuccess: async (_, variables) => {
+      const operatorBefore = operators.find((operator) => operator.id === variables.id);
+
+      await logAuditEvent({
+        action: `operators.${variables.action}`,
+        resourceType: 'operator',
+        resourceId: variables.id,
+        before: operatorBefore
+          ? {
+              status: operatorBefore.status,
+              full_name: operatorBefore.full_name,
+            }
+          : undefined,
+        after: {
+          status: variables.status,
+        },
+        metadata: {
+          source: 'admin-web',
+        },
+      });
+
       queryClient.invalidateQueries({ queryKey: ['operators'] });
       setIsApprovalModalOpen(false);
       setSelectedOperator(null);
@@ -298,7 +370,36 @@ export default function OperatorsPage() {
   });
 
   // Handle approve/reject
-  const handleApproveReject = (operator: Operator, action: 'approve' | 'reject') => {
+  const getActionTargetStatus = (action: OperatorAction): 'approved' | 'rejected' | 'suspended' => {
+    const map: Record<OperatorAction, 'approved' | 'rejected' | 'suspended'> = {
+      approve: 'approved',
+      reject: 'rejected',
+      suspend: 'suspended',
+      reactivate: 'approved',
+    };
+
+    return map[action];
+  };
+
+  const canRunAction = (action: OperatorAction) => {
+    if (action === 'approve' || action === 'reject') {
+      return canVerifyOperators;
+    }
+
+    return canSuspendOperators;
+  };
+
+  // Handle lifecycle action request
+  const handleLifecycleAction = (operator: Operator, action: OperatorAction) => {
+    if (!canRunAction(action)) {
+      return;
+    }
+
+    const nextStatus = getActionTargetStatus(action);
+    if (!operatorsApi.canTransitionStatus(operator.status, nextStatus)) {
+      return;
+    }
+
     setSelectedOperator(operator);
     setApprovalAction(action);
     setIsApprovalModalOpen(true);
@@ -313,9 +414,17 @@ export default function OperatorsPage() {
   // Confirm approval/rejection
   const confirmAction = () => {
     if (selectedOperator) {
+      const nextStatus = getActionTargetStatus(approvalAction);
+
+      if (!operatorsApi.canTransitionStatus(selectedOperator.status, nextStatus)) {
+        return;
+      }
+
       updateStatusMutation.mutate({
         id: selectedOperator.id,
-        status: approvalAction === 'approve' ? 'approved' : 'rejected',
+        status: nextStatus,
+        currentStatus: selectedOperator.status,
+        action: approvalAction,
       });
     }
   };
@@ -325,6 +434,7 @@ export default function OperatorsPage() {
     pending: operators.filter((o) => o.status === 'pending').length,
     approved: operators.filter((o) => o.status === 'approved').length,
     rejected: operators.filter((o) => o.status === 'rejected').length,
+    suspended: operators.filter((o) => o.status === 'suspended').length,
   };
 
   return (
@@ -342,7 +452,7 @@ export default function OperatorsPage() {
 
         {/* Status Filter Tabs */}
         <div className="flex gap-2">
-          {(['all', 'pending', 'approved', 'rejected'] as OperatorStatus[]).map((status) => (
+          {(['all', 'pending', 'approved', 'rejected', 'suspended'] as OperatorStatus[]).map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -482,20 +592,42 @@ export default function OperatorsPage() {
                         {operator.status === 'pending' && (
                           <>
                             <button
-                              onClick={() => handleApproveReject(operator, 'approve')}
-                              className="p-2 hover:bg-green-500/20 rounded-lg transition-colors text-green-400"
+                              onClick={() => handleLifecycleAction(operator, 'approve')}
+                              disabled={!canVerifyOperators}
+                              className="p-2 hover:bg-green-500/20 rounded-lg transition-colors text-green-400 disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Approve"
                             >
                               <CheckCircle className="w-5 h-5" />
                             </button>
                             <button
-                              onClick={() => handleApproveReject(operator, 'reject')}
-                              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-red-400"
+                              onClick={() => handleLifecycleAction(operator, 'reject')}
+                              disabled={!canVerifyOperators}
+                              className="p-2 hover:bg-red-500/20 rounded-lg transition-colors text-red-400 disabled:opacity-40 disabled:cursor-not-allowed"
                               title="Reject"
                             >
                               <XCircle className="w-5 h-5" />
                             </button>
                           </>
+                        )}
+                        {operator.status === 'approved' && (
+                          <button
+                            onClick={() => handleLifecycleAction(operator, 'suspend')}
+                            disabled={!canSuspendOperators}
+                            className="p-2 hover:bg-orange-500/20 rounded-lg transition-colors text-orange-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Suspend"
+                          >
+                            <AlertTriangle className="w-5 h-5" />
+                          </button>
+                        )}
+                        {operator.status === 'suspended' && (
+                          <button
+                            onClick={() => handleLifecycleAction(operator, 'reactivate')}
+                            disabled={!canSuspendOperators}
+                            className="p-2 hover:bg-blue-500/20 rounded-lg transition-colors text-blue-500 disabled:opacity-40 disabled:cursor-not-allowed"
+                            title="Reactivate"
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                          </button>
                         )}
                       </div>
                     </td>

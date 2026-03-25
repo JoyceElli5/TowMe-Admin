@@ -1,5 +1,12 @@
 // Admin user roles
-export type AdminRole = 'super_admin' | 'operator_manager' | 'support_staff';
+export type AdminRole =
+  | 'super_admin'
+  | 'ops_admin'
+  | 'support_admin'
+  | 'finance_admin'
+  | 'risk_admin'
+  | 'operator_manager'
+  | 'support_staff';
 
 export interface AdminUser {
   id: string;
@@ -45,10 +52,15 @@ export interface AppUser {
   avatar_url?: string;
   role: 'user' | 'operator';
   is_active: boolean;
+  moderation_status?: 'active' | 'soft_banned' | 'permanently_banned';
+  ban_reason?: string;
+  banned_at?: string;
   total_trips: number;
   created_at: string;
   last_login?: string;
 }
+
+export type UserModerationAction = 'soft_ban' | 'permanent_ban' | 'unblock' | 'reset_auth';
 
 // Tow Request types
 export type RequestStatus = 
@@ -59,6 +71,13 @@ export type RequestStatus =
   | 'in_progress' 
   | 'completed' 
   | 'cancelled';
+
+export type RequestInterventionAction =
+  | 'cancel'
+  | 'reassign'
+  | 'escalate'
+  | 'mark_fraud'
+  | 'emergency_override';
 
 export interface TowRequest {
   id: string;
@@ -95,6 +114,11 @@ export interface TowRequest {
   completed_at?: string;
   cancelled_at?: string;
   cancellation_reason?: string;
+  is_escalated?: boolean;
+  escalated_at?: string;
+  is_fraud_suspected?: boolean;
+  emergency_override?: boolean;
+  intervention_notes?: string;
 }
 
 // Vehicle Pricing types
@@ -114,7 +138,25 @@ export interface PricingConfig {
   vehicle_type: string;
   base_fee: number;
   per_km_rate: number;
+  service_fee?: number;
+  surge_multiplier?: number;
+  zone_multiplier?: number;
+  effective_from?: string;
   is_active: boolean;
+}
+
+export interface PricingVersion {
+  id: string;
+  pricing_id: string;
+  vehicle_type: string;
+  base_fee: number;
+  per_km_rate: number;
+  service_fee?: number;
+  surge_multiplier?: number;
+  zone_multiplier?: number;
+  effective_from: string;
+  changed_at: string;
+  changed_by?: string;
 }
 
 // Analytics types
@@ -156,11 +198,20 @@ export interface SupportTicket {
   id: string;
   user_id: string;
   user_name: string;
+  user_email?: string;
   subject: string;
   message: string;
+  category: 'general' | 'payment' | 'technical' | 'complaint' | 'dispute';
   status: 'open' | 'in_progress' | 'resolved' | 'closed';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   assigned_to?: string;
+  assigned_to_name?: string;
+  linked_request_id?: string;
+  linked_payment_id?: string;
+  dispute_id?: string;
+  sla_due_at?: string;
+  resolution_summary?: string;
+  last_reply_at?: string;
   created_at: string;
   updated_at: string;
 }

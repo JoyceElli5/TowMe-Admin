@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowUpRight, 
   ArrowDownLeft,
@@ -9,92 +10,17 @@ import {
   RefreshCcw,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Ban,
+  WalletCards,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { financeApi } from '../lib/api';
+import type { FinanceLedgerEntry } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+import { logAuditEvent } from '../lib/audit';
 
-interface Payment {
-  id: string;
-  type: 'payment' | 'refund' | 'payout';
-  amount: number;
-  status: 'completed' | 'pending' | 'failed';
-  requestId: string;
-  userName: string;
-  operatorName: string;
-  method: string;
-  date: string;
-}
-
-const demoPayments: Payment[] = [
-  {
-    id: 'PAY-001',
-    type: 'payment',
-    amount: 150.00,
-    status: 'completed',
-    requestId: 'REQ-1234',
-    userName: 'Ama Serwaa',
-    operatorName: 'John Mensah',
-    method: 'Mobile Money',
-    date: '2026-02-05 14:30',
-  },
-  {
-    id: 'PAY-002',
-    type: 'payment',
-    amount: 200.00,
-    status: 'completed',
-    requestId: 'REQ-1233',
-    userName: 'Kofi Boateng',
-    operatorName: 'Kwame Asante',
-    method: 'Card',
-    date: '2026-02-05 12:15',
-  },
-  {
-    id: 'PAY-003',
-    type: 'refund',
-    amount: 50.00,
-    status: 'completed',
-    requestId: 'REQ-1225',
-    userName: 'Akua Mensah',
-    operatorName: 'Yaw Frimpong',
-    method: 'Mobile Money',
-    date: '2026-02-04 16:45',
-  },
-  {
-    id: 'PAY-004',
-    type: 'payout',
-    amount: 850.00,
-    status: 'completed',
-    requestId: '-',
-    userName: '-',
-    operatorName: 'John Mensah',
-    method: 'Bank Transfer',
-    date: '2026-02-04 10:00',
-  },
-  {
-    id: 'PAY-005',
-    type: 'payment',
-    amount: 175.00,
-    status: 'pending',
-    requestId: 'REQ-1235',
-    userName: 'Kwesi Appiah',
-    operatorName: 'Samuel Osei',
-    method: 'Mobile Money',
-    date: '2026-02-05 15:00',
-  },
-  {
-    id: 'PAY-006',
-    type: 'payment',
-    amount: 125.00,
-    status: 'failed',
-    requestId: 'REQ-1236',
-    userName: 'Efua Owusu',
-    operatorName: 'John Mensah',
-    method: 'Card',
-    date: '2026-02-05 15:30',
-  },
-];
-
-const getStatusColor = (status: Payment['status']) => {
+const getStatusColor = (status: FinanceLedgerEntry['status']) => {
   switch (status) {
     case 'completed':
       return 'bg-green-500/10 text-green-500';
@@ -105,7 +31,7 @@ const getStatusColor = (status: Payment['status']) => {
   }
 };
 
-const getStatusIcon = (status: Payment['status']) => {
+const getStatusIcon = (status: FinanceLedgerEntry['status']) => {
   switch (status) {
     case 'completed':
       return CheckCircle;
@@ -116,7 +42,7 @@ const getStatusIcon = (status: Payment['status']) => {
   }
 };
 
-const getTypeIcon = (type: Payment['type']) => {
+const getTypeIcon = (type: FinanceLedgerEntry['type']) => {
   switch (type) {
     case 'payment':
       return ArrowDownLeft;
@@ -127,7 +53,7 @@ const getTypeIcon = (type: Payment['type']) => {
   }
 };
 
-const getTypeColor = (type: Payment['type']) => {
+const getTypeColor = (type: FinanceLedgerEntry['type']) => {
   switch (type) {
     case 'payment':
       return 'text-green-500';
@@ -139,9 +65,53 @@ const getTypeColor = (type: Payment['type']) => {
 };
 
 export default function PaymentsPage() {
-  const [payments] = useState(demoPayments);
+  const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canManageRefunds = hasPermission('finance.manage_refunds');
   const [filter, setFilter] = useState<'all' | 'payment' | 'refund' | 'payout'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+
+  const { data: payments = [], isLoading } = useQuery({
+    queryKey: ['finance-ledger'],
+    queryFn: financeApi.getLedger,
+  });
+
+  const requestRefundMutation = useMutation({
+    mutationFn: ({ paymentId, amount, reason }: { paymentId: string; amount: number; reason?: string }) =>
+      financeApi.requestRefund(paymentId, amount, reason),
+    onSuccess: async (_, variables) => {
+      await logAuditEvent({
+        action: 'finance.request_refund',
+        resourceType: 'payment',
+        resourceId: variables.paymentId,
+        after: { amount: variables.amount, reason: variables.reason },
+        metadata: { source: 'admin-web' },
+      });
+      queryClient.invalidateQueries({ queryKey: ['finance-ledger'] });
+    },
+  });
+
+  const reviewRefundMutation = useMutation({
+    mutationFn: ({
+      refundId,
+      decision,
+      note,
+    }: {
+      refundId: string;
+      decision: 'approve' | 'reject';
+      note?: string;
+    }) => (decision === 'approve' ? financeApi.approveRefund(refundId, note) : financeApi.rejectRefund(refundId, note)),
+    onSuccess: async (_, variables) => {
+      await logAuditEvent({
+        action: variables.decision === 'approve' ? 'finance.approve_refund' : 'finance.reject_refund',
+        resourceType: 'refund',
+        resourceId: variables.refundId,
+        after: { note: variables.note },
+        metadata: { source: 'admin-web' },
+      });
+      queryClient.invalidateQueries({ queryKey: ['finance-ledger'] });
+    },
+  });
 
   const filteredPayments = payments.filter(p => {
     const matchesFilter = filter === 'all' || p.type === filter;
@@ -151,6 +121,61 @@ export default function PaymentsPage() {
       p.operatorName.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesFilter && matchesSearch;
   });
+
+  const handleRequestRefund = (payment: FinanceLedgerEntry) => {
+    if (!canManageRefunds || payment.type !== 'payment' || payment.status !== 'completed') {
+      return;
+    }
+
+    const amountRaw = window.prompt(`Refund amount for ${payment.id}:`, payment.amount.toFixed(2));
+    if (!amountRaw) return;
+    const amount = Number(amountRaw);
+    if (Number.isNaN(amount) || amount <= 0 || amount > payment.amount) return;
+    const reason = window.prompt('Refund reason (optional):') || undefined;
+
+    requestRefundMutation.mutate({ paymentId: payment.id, amount, reason });
+  };
+
+  const handleReviewRefund = (refund: FinanceLedgerEntry, decision: 'approve' | 'reject') => {
+    if (!canManageRefunds || refund.type !== 'refund' || refund.status !== 'pending') {
+      return;
+    }
+
+    const message = decision === 'approve' ? 'Approve this refund?' : 'Reject this refund?';
+    if (!window.confirm(message)) return;
+    const note = window.prompt('Decision note (optional):') || undefined;
+
+    reviewRefundMutation.mutate({ refundId: refund.id, decision, note });
+  };
+
+  const handleExportCsv = () => {
+    const headers = ['id', 'type', 'amount', 'status', 'requestId', 'userName', 'operatorName', 'method', 'date'];
+    const rows = filteredPayments.map((entry) => [
+      entry.id,
+      entry.type,
+      entry.amount.toFixed(2),
+      entry.status,
+      entry.requestId,
+      entry.userName,
+      entry.operatorName,
+      entry.method,
+      entry.date,
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `finance-ledger-${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   const totalRevenue = payments
     .filter(p => p.type === 'payment' && p.status === 'completed')
@@ -176,7 +201,7 @@ export default function PaymentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Payments & Transactions</h1>
           <p className="text-gray-500 mt-1">Manage payments, refunds, and operator payouts</p>
         </div>
-        <button className="btn-primary flex items-center gap-2">
+        <button onClick={handleExportCsv} className="btn-primary flex items-center gap-2">
           <Download className="w-4 h-4" />
           Export Report
         </button>
@@ -287,6 +312,12 @@ export default function PaymentsPage() {
 
       {/* Transactions Table */}
       <div className="glass-card overflow-hidden">
+        {isLoading ? (
+          <div className="p-12 text-center">
+            <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-500">Loading finance ledger...</p>
+          </div>
+        ) : (
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -345,9 +376,41 @@ export default function PaymentsPage() {
                     </td>
                     <td className="px-6 py-4 text-gray-500 text-sm">{payment.date}</td>
                     <td className="px-6 py-4">
-                      <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors">
-                        <Eye className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors" title="View Details">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {payment.type === 'payment' && payment.status === 'completed' && (
+                          <button
+                            onClick={() => handleRequestRefund(payment)}
+                            disabled={!canManageRefunds || requestRefundMutation.isPending}
+                            className="p-2 rounded-lg hover:bg-orange-50 text-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Request Refund"
+                          >
+                            <WalletCards className="w-4 h-4" />
+                          </button>
+                        )}
+                        {payment.type === 'refund' && payment.status === 'pending' && (
+                          <>
+                            <button
+                              onClick={() => handleReviewRefund(payment, 'approve')}
+                              disabled={!canManageRefunds || reviewRefundMutation.isPending}
+                              className="p-2 rounded-lg hover:bg-green-50 text-green-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              title="Approve Refund"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleReviewRefund(payment, 'reject')}
+                              disabled={!canManageRefunds || reviewRefundMutation.isPending}
+                              className="p-2 rounded-lg hover:bg-red-50 text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                              title="Reject Refund"
+                            >
+                              <Ban className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                 );
@@ -355,6 +418,7 @@ export default function PaymentsPage() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </div>
   );

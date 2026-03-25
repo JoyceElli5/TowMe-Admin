@@ -1,28 +1,80 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search,
   User,
   Phone,
   CheckCircle,
-  XCircle,
   ChevronLeft,
   ChevronRight,
+  UserX,
+  ShieldAlert,
+  UserCheck,
+  KeyRound,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { usersApi } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+import { logAuditEvent } from '../lib/audit';
+import type { AppUser } from '../types';
 
 
 export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const queryClient = useQueryClient();
+  const { hasPermission, adminUser } = useAuth();
+  const canModerateUsers = hasPermission('users.moderate');
+  const isSuperAdmin = adminUser?.role === 'super_admin';
 
   // Fetch users
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: usersApi.getAll,
+  });
+
+  const moderationMutation = useMutation({
+    mutationFn: ({
+      user,
+      action,
+      reason,
+    }: {
+      user: AppUser;
+      action: 'soft_ban' | 'permanent_ban' | 'unblock';
+      reason?: string;
+    }) => usersApi.moderate(user.id, action, { reason }),
+    onSuccess: async (_, variables) => {
+      await logAuditEvent({
+        action: `users.${variables.action}`,
+        resourceType: 'app_user',
+        resourceId: variables.user.id,
+        before: {
+          is_active: variables.user.is_active,
+          moderation_status: variables.user.moderation_status,
+        },
+        after: {
+          action: variables.action,
+          reason: variables.reason,
+        },
+        metadata: { source: 'admin-web' },
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+
+  const resetAuthMutation = useMutation({
+    mutationFn: (user: AppUser) => usersApi.resetAuth(user.id),
+    onSuccess: async (_, user) => {
+      await logAuditEvent({
+        action: 'users.reset_auth',
+        resourceType: 'app_user',
+        resourceId: user.id,
+        metadata: { source: 'admin-web' },
+      });
+    },
   });
 
   // Filter users
@@ -57,6 +109,39 @@ export default function UsersPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
+  };
+
+  const getUserStatusLabel = (user: AppUser) => {
+    if (user.moderation_status === 'permanently_banned') {
+      return { label: 'Permanently Banned', className: 'text-red-600', icon: ShieldAlert };
+    }
+    if (user.moderation_status === 'soft_banned' || !user.is_active) {
+      return { label: 'Soft Banned', className: 'text-orange-600', icon: UserX };
+    }
+    return { label: 'Active', className: 'text-green-600', icon: CheckCircle };
+  };
+
+  const handleModeration = (user: AppUser, action: 'soft_ban' | 'permanent_ban' | 'unblock') => {
+    if (!canModerateUsers || !usersApi.canModerate(user, action, isSuperAdmin)) {
+      return;
+    }
+
+    if (action === 'unblock') {
+      if (!window.confirm(`Unblock ${user.full_name}?`)) return;
+      moderationMutation.mutate({ user, action });
+      return;
+    }
+
+    const label = action === 'soft_ban' ? 'soft-ban' : 'permanently ban';
+    if (!window.confirm(`Are you sure you want to ${label} ${user.full_name}?`)) return;
+    const reason = window.prompt('Reason for moderation (optional):') || undefined;
+    moderationMutation.mutate({ user, action, reason });
+  };
+
+  const handleResetAuth = (user: AppUser) => {
+    if (!canModerateUsers) return;
+    if (!window.confirm(`Trigger auth reset flow for ${user.full_name}?`)) return;
+    resetAuthMutation.mutate(user);
   };
 
   return (
@@ -117,6 +202,7 @@ export default function UsersPage() {
                     <th className="table-header px-6 py-4">Total Trips</th>
                     <th className="table-header px-6 py-4">Joined</th>
                     <th className="table-header px-6 py-4">Last Active</th>
+                    <th className="table-header px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -161,17 +247,16 @@ export default function UsersPage() {
 
                       {/* Status */}
                       <td className="py-4 px-6">
-                        {user.is_active ? (
-                          <span className="flex items-center gap-1.5 text-green-600 text-sm">
-                            <CheckCircle className="w-4 h-4" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1.5 text-gray-400 text-sm">
-                            <XCircle className="w-4 h-4" />
-                            Inactive
-                          </span>
-                        )}
+                        {(() => {
+                          const statusMeta = getUserStatusLabel(user);
+                          const StatusIcon = statusMeta.icon;
+                          return (
+                            <span className={cn('flex items-center gap-1.5 text-sm', statusMeta.className)}>
+                              <StatusIcon className="w-4 h-4" />
+                              {statusMeta.label}
+                            </span>
+                          );
+                        })()}
                       </td>
 
                       {/* Total Trips */}
@@ -192,6 +277,44 @@ export default function UsersPage() {
                         <span className="text-gray-500 text-sm">
                           {formatTime(user.last_login)}
                         </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-4 px-6">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleResetAuth(user)}
+                            disabled={!canModerateUsers || resetAuthMutation.isPending}
+                            className="p-2 rounded-lg hover:bg-blue-50 text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Reset Auth Flow"
+                          >
+                            <KeyRound className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleModeration(user, 'soft_ban')}
+                            disabled={!canModerateUsers || !usersApi.canModerate(user, 'soft_ban', isSuperAdmin) || moderationMutation.isPending}
+                            className="p-2 rounded-lg hover:bg-orange-50 text-orange-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Soft Ban"
+                          >
+                            <UserX className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleModeration(user, 'permanent_ban')}
+                            disabled={!canModerateUsers || !usersApi.canModerate(user, 'permanent_ban', isSuperAdmin) || moderationMutation.isPending}
+                            className="p-2 rounded-lg hover:bg-red-50 text-red-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Permanent Ban"
+                          >
+                            <ShieldAlert className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleModeration(user, 'unblock')}
+                            disabled={!canModerateUsers || !usersApi.canModerate(user, 'unblock', isSuperAdmin) || moderationMutation.isPending}
+                            className="p-2 rounded-lg hover:bg-green-50 text-green-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            title="Unblock"
+                          >
+                            <UserCheck className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </motion.tr>
                   ))}

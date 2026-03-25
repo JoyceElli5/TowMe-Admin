@@ -125,11 +125,17 @@ export default function DashboardPage() {
     queryFn: dashboardApi.getPendingOperators,
   });
 
+  const { data: alerts = [] } = useQuery({
+    queryKey: ['dashboard-alerts'],
+    queryFn: dashboardApi.getAlerts,
+    refetchInterval: 30000,
+  });
+
   // Chart data based on stats
   const requestsByStatus = [
     { name: 'Completed', value: stats?.completedRequests || 0, color: '#22c55e' },
     { name: 'In Progress', value: stats?.activeRequests || 0, color: '#F5A623' },
-    { name: 'Pending', value: stats?.pendingOperators || 0, color: '#eab308' },
+    { name: 'Pending', value: stats?.pendingRequests || 0, color: '#eab308' },
   ];
 
   // Revenue data derived from stats — distribute total revenue across days
@@ -147,31 +153,43 @@ export default function DashboardPage() {
 
   const statCards = [
     {
-      title: 'Total Users',
-      value: stats?.totalUsers || 0,
-      icon: Users,
-      iconBg: 'bg-blue-500/20 text-blue-400',
-      onClick: () => navigate('/users'),
+      title: 'Active Requests',
+      value: stats?.activeRequests || 0,
+      icon: MapPin,
+      iconBg: 'bg-purple-500/20 text-purple-500',
+      onClick: () => navigate('/requests'),
     },
     {
-      title: 'Active Operators',
-      value: stats?.totalOperators || 0,
+      title: 'Completion Rate',
+      value: `${stats?.completionRate || 0}%`,
+      icon: CheckCircle,
+      iconBg: 'bg-green-500/20 text-green-500',
+    },
+    {
+      title: 'Cancellation Rate',
+      value: `${stats?.cancellationRate || 0}%`,
+      icon: AlertTriangle,
+      iconBg: 'bg-red-500/20 text-red-500',
+    },
+    {
+      title: 'Online Operators',
+      value: stats?.onlineOperators || 0,
       icon: Truck,
       iconBg: 'bg-primary-500/20 text-primary-500',
       onClick: () => navigate('/operators'),
     },
     {
-      title: 'Total Requests',
-      value: stats?.totalRequests || 0,
-      icon: MapPin,
-      iconBg: 'bg-purple-500/20 text-purple-400',
-      onClick: () => navigate('/requests'),
-    },
-    {
-      title: 'Total Revenue',
-      value: `GHS ${stats?.totalRevenue?.toLocaleString() || 0}`,
+      title: 'Revenue Today',
+      value: `GHS ${stats?.revenueToday?.toLocaleString() || 0}`,
       icon: DollarSign,
       iconBg: 'bg-green-500/20 text-green-400',
+    },
+    {
+      title: 'Total Users',
+      value: stats?.totalUsers || 0,
+      icon: Users,
+      iconBg: 'bg-blue-500/20 text-blue-400',
+      onClick: () => navigate('/users'),
     },
   ];
 
@@ -213,8 +231,53 @@ export default function DashboardPage() {
         </motion.div>
       )}
 
+      {/* Operational Alerts */}
+      <motion.div
+        className="glass-card p-6"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Operational Alerts</h3>
+          <span className="text-sm text-gray-500">Auto refresh: 30s</span>
+        </div>
+        {alerts.length === 0 ? (
+          <div className="rounded-xl bg-green-50 border border-green-200 p-4">
+            <p className="text-green-700 font-medium">No critical alerts right now.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {alerts.map((alert) => (
+              <button
+                key={alert.id}
+                onClick={() => navigate(alert.route)}
+                className={cn(
+                  'w-full text-left rounded-xl p-4 border transition-colors',
+                  alert.severity === 'high'
+                    ? 'bg-red-50 border-red-200 hover:bg-red-100'
+                    : 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100'
+                )}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-gray-900">{alert.title}</p>
+                    <p className="text-sm text-gray-600 mt-1">{alert.description}</p>
+                  </div>
+                  <span className={cn(
+                    'px-2 py-1 rounded-lg text-xs font-semibold',
+                    alert.severity === 'high' ? 'bg-red-200 text-red-800' : 'bg-yellow-200 text-yellow-800'
+                  )}>
+                    {alert.count}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </motion.div>
+
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         {statCards.map((stat, index) => (
           <motion.div
             key={stat.title}
