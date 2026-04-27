@@ -38,6 +38,7 @@ const menuItems = [
 
 const bottomItems = [
   { icon: Settings01Icon, label: 'Settings', path: '/settings', permission: 'settings.view' as AdminPermission },
+  { icon: Shield01Icon, label: 'Audit Logs', path: '/audit-logs', permission: 'audit.view' as AdminPermission },
 ];
 
 // Navigation item animation variants

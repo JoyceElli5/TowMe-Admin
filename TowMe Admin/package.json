@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "start": "npm --prefix admin run start",
+    "dev": "npm --prefix admin run dev:local",
+    "install:admin": "npm --prefix admin install"
+  },
+  "dependencies": {
+    "hugeicons-react": "^0.4.0"
+  }
+}

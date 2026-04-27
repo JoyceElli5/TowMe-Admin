@@ -18,6 +18,9 @@ import { cn } from '../lib/utils';
 import { supportApi } from '../lib/api';
 import type { SupportDisputeDecision } from '../lib/api';
 import type { SupportTicket } from '../types';
+import { SUPPORT_PRIORITIES, SUPPORT_STATUSES } from '../lib/contracts';
+import type { SupportPriority, SupportStatus } from '../lib/contracts';
+import { formatStatusLabel } from '../lib/status-label';
 import { useAuth } from '../contexts/AuthContext';
 import { logAuditEvent } from '../lib/audit';
 
@@ -54,8 +57,11 @@ const formatDate = (value?: string) => {
   return date.toLocaleString();
 };
 
-const STATUS_OPTIONS: Array<SupportTicket['status']> = ['open', 'in_progress', 'resolved', 'closed'];
-const PRIORITY_OPTIONS: Array<SupportTicket['priority']> = ['low', 'medium', 'high', 'urgent'];
+const STATUS_OPTIONS: Array<SupportStatus> = [...SUPPORT_STATUSES];
+const PRIORITY_OPTIONS: Array<SupportPriority> = [...SUPPORT_PRIORITIES];
+const SUPPORT_FILTERS: Array<'all' | SupportStatus> = ['all', ...SUPPORT_STATUSES];
+const ACTIVE_SUPPORT_STATUSES: SupportStatus[] = [SUPPORT_STATUSES[0], SUPPORT_STATUSES[1]];
+const HIGH_SUPPORT_PRIORITIES: SupportPriority[] = [SUPPORT_PRIORITIES[2], SUPPORT_PRIORITIES[3]];
 
 export default function SupportPage() {
   const queryClient = useQueryClient();
@@ -74,7 +80,7 @@ export default function SupportPage() {
     refetchInterval: 30000,
   });
 
-  const [filter, setFilter] = useState<'all' | 'open' | 'in_progress' | 'resolved' | 'closed'>('all');
+  const [filter, setFilter] = useState<'all' | SupportStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [replyMessage, setReplyMessage] = useState('');
@@ -140,12 +146,23 @@ export default function SupportPage() {
     return matchesFilter && matchesSearch;
   }), [filter, searchQuery, tickets]);
 
-  const openCount = supportStats?.open ?? tickets.filter((ticket) => ticket.status === 'open').length;
-  const inProgressCount = supportStats?.inProgress ?? tickets.filter((ticket) => ticket.status === 'in_progress').length;
-  const resolvedCount = supportStats?.resolved ?? tickets.filter((ticket) => ticket.status === 'resolved').length;
+  const trustSafetyQueue = useMemo(() => {
+    return tickets.filter((ticket) => {
+      const content = `${ticket.subject} ${ticket.message}`.toLowerCase();
+      const hasSafetyKeyword = /(fraud|safety|threat|assault|emergency|abuse|incident)/i.test(content);
+      const isTrustCategory = ticket.category === 'complaint' || ticket.category === 'dispute';
+      const isActive = ACTIVE_SUPPORT_STATUSES.includes(ticket.status);
+
+      return isActive && (isTrustCategory || hasSafetyKeyword || ticket.priority === SUPPORT_PRIORITIES[3]);
+    });
+  }, [tickets]);
+
+  const openCount = supportStats?.open ?? tickets.filter((ticket) => ticket.status === SUPPORT_STATUSES[0]).length;
+  const inProgressCount = supportStats?.inProgress ?? tickets.filter((ticket) => ticket.status === SUPPORT_STATUSES[1]).length;
+  const resolvedCount = supportStats?.resolved ?? tickets.filter((ticket) => ticket.status === SUPPORT_STATUSES[2]).length;
   const highPriorityCount =
     supportStats?.highPriorityOpen ??
-    tickets.filter((ticket) => ['high', 'urgent'].includes(ticket.priority) && ticket.status !== 'closed').length;
+    tickets.filter((ticket) => HIGH_SUPPORT_PRIORITIES.includes(ticket.priority) && ticket.status !== SUPPORT_STATUSES[3]).length;
 
   const closeModal = () => {
     setSelectedTicket(null);
@@ -191,7 +208,7 @@ export default function SupportPage() {
       {
         assigned_to: adminUser.id,
         assigned_to_name: adminUser.name,
-        status: ticket.status === 'open' ? 'in_progress' : ticket.status,
+        status: ticket.status === SUPPORT_STATUSES[0] ? SUPPORT_STATUSES[1] : ticket.status,
       },
       'support.assign_ticket'
     );
@@ -240,6 +257,38 @@ export default function SupportPage() {
       resourceId: ticket.dispute_id,
       after: { decision, note, refundAmount },
       metadata: { source: 'admin-web', ticketId: ticket.id },
+    });
+  };
+
+  const handleEscalateToRisk = async (ticket: SupportTicket) => {
+    if (!canManageSupport) return;
+
+    const note = window.prompt('Escalation note for risk/safety team (required):');
+    if (!note?.trim()) return;
+
+    updateTicketMutation.mutate({
+      ticketId: ticket.id,
+      payload: {
+        priority: SUPPORT_PRIORITIES[3],
+        status: ticket.status === SUPPORT_STATUSES[0] ? SUPPORT_STATUSES[1] : ticket.status,
+        resolution_summary: ticket.resolution_summary || `Escalated to risk: ${note.trim()}`,
+      },
+    });
+
+    await logAuditEvent({
+      action: 'support.escalate_to_risk',
+      resourceType: 'support_ticket',
+      resourceId: ticket.id,
+      before: {
+        status: ticket.status,
+        priority: ticket.priority,
+      },
+      after: {
+        status: ticket.status === SUPPORT_STATUSES[0] ? SUPPORT_STATUSES[1] : ticket.status,
+        priority: SUPPORT_PRIORITIES[3],
+        escalation_note: note.trim(),
+      },
+      metadata: { source: 'admin-web' },
     });
   };
 
@@ -329,11 +378,48 @@ export default function SupportPage() {
             <div>
               <p className="text-sm text-gray-500 dark:text-dark-400">Assigned Tickets</p>
               <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                {tickets.filter((ticket) => !!ticket.assigned_to && ['open', 'in_progress'].includes(ticket.status)).length}
+                {tickets.filter((ticket) => !!ticket.assigned_to && ACTIVE_SUPPORT_STATUSES.includes(ticket.status)).length}
               </p>
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Trust & Safety Queue */}
+      <div className="glass-card p-5">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Trust & Safety Queue</h2>
+            <p className="text-xs text-gray-500 dark:text-dark-400">Active high-risk complaints/disputes and safety-keyword tickets</p>
+          </div>
+          <span className="text-xs px-2 py-1 rounded bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300">
+            {trustSafetyQueue.length}
+          </span>
+        </div>
+
+        {trustSafetyQueue.length === 0 ? (
+          <p className="text-sm text-gray-500 dark:text-dark-400">No trust/safety escalations pending.</p>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-auto pr-1">
+            {trustSafetyQueue.slice(0, 10).map((ticket) => (
+              <div key={`risk-${ticket.id}`} className="rounded-xl border border-gray-200 dark:border-dark-700 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{ticket.id} • {ticket.subject}</p>
+                    <p className="text-xs text-gray-500 dark:text-dark-400 mt-1">{ticket.user_name} • {formatStatusLabel(ticket.status, { titleCase: false })}</p>
+                  </div>
+                  <button
+                    onClick={() => void handleEscalateToRisk(ticket)}
+                    disabled={!canManageSupport || updateTicketMutation.isPending}
+                    className="px-2.5 py-1.5 rounded-lg text-xs bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-500/20 dark:text-red-200 disabled:opacity-40"
+                  >
+                    Escalate
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Filters */}
@@ -350,7 +436,7 @@ export default function SupportPage() {
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto">
-          {(['all', 'open', 'in_progress', 'resolved', 'closed'] as const).map((status) => (
+          {SUPPORT_FILTERS.map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
@@ -361,7 +447,7 @@ export default function SupportPage() {
                   : 'bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-dark-300 hover:bg-gray-200 dark:hover:bg-dark-600'
               )}
             >
-              {status.replace('_', ' ').charAt(0).toUpperCase() + status.replace('_', ' ').slice(1)}
+              {formatStatusLabel(status)}
             </button>
           ))}
         </div>
@@ -390,7 +476,7 @@ export default function SupportPage() {
                     'px-2 py-0.5 rounded-full text-xs font-medium',
                     getStatusColor(ticket.status)
                   )}>
-                    {ticket.status.replace('_', ' ')}
+                    {formatStatusLabel(ticket.status, { titleCase: false })}
                   </span>
                   <span className={cn(
                     'px-2 py-0.5 rounded-full text-xs font-medium',
@@ -398,6 +484,11 @@ export default function SupportPage() {
                   )}>
                     {ticket.priority}
                   </span>
+                  {(ticket.category === 'complaint' || ticket.category === 'dispute') && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-600 dark:text-red-300">
+                      trust-safety
+                    </span>
+                  )}
                 </div>
                 <h3 className="font-medium text-gray-900 dark:text-white mb-1">{ticket.subject}</h3>
                 <p className="text-sm text-gray-500 dark:text-dark-400 line-clamp-1">{ticket.message}</p>
@@ -430,7 +521,7 @@ export default function SupportPage() {
                     'px-2 py-0.5 rounded-full text-xs font-medium',
                     getStatusColor(selectedTicket.status)
                   )}>
-                    {selectedTicket.status.replace('_', ' ')}
+                    {formatStatusLabel(selectedTicket.status, { titleCase: false })}
                   </span>
                 </div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{selectedTicket.subject}</h2>
@@ -498,7 +589,7 @@ export default function SupportPage() {
                           selectedTicket.status === status ? 'bg-primary-500 text-white' : 'bg-gray-100 dark:bg-dark-700 text-gray-700 dark:text-dark-300'
                         )}
                       >
-                        {status.replace('_', ' ')}
+                        {formatStatusLabel(status, { titleCase: false })}
                       </button>
                     ))}
                   </div>
@@ -524,6 +615,16 @@ export default function SupportPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-end">
+                <button
+                  onClick={() => void handleEscalateToRisk(selectedTicket)}
+                  disabled={!canManageSupport || updateTicketMutation.isPending}
+                  className="btn-secondary text-sm"
+                >
+                  Escalate To Risk Team
+                </button>
               </div>
 
               {/* Dispute controls */}

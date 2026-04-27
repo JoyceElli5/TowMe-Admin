@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { MapContainer, TileLayer, CircleMarker, Popup, Polyline } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Search,
   MapPin,
@@ -24,10 +26,38 @@ import {
 import { cn } from '../lib/utils';
 import { requestsApi } from '../lib/api';
 import type { TowRequest, RequestStatus, RequestInterventionAction } from '../types';
+import { REQUEST_STATUSES } from '../lib/contracts';
+import { formatStatusLabel } from '../lib/status-label';
 import { useAuth } from '../contexts/AuthContext';
 import { logAuditEvent } from '../lib/audit';
 
 type FilterStatus = 'all' | RequestStatus;
+
+const REQUEST_STATUS = {
+  pending: REQUEST_STATUSES[0],
+  accepted: REQUEST_STATUSES[1],
+  enRoute: REQUEST_STATUSES[2],
+  arrived: REQUEST_STATUSES[3],
+  inProgress: REQUEST_STATUSES[4],
+  completed: REQUEST_STATUSES[5],
+  cancelled: REQUEST_STATUSES[6],
+} as const;
+
+const REQUEST_FILTERS: FilterStatus[] = [
+  'all',
+  REQUEST_STATUS.pending,
+  REQUEST_STATUS.inProgress,
+  REQUEST_STATUS.completed,
+  REQUEST_STATUS.cancelled,
+];
+
+const ACTIVE_REQUEST_STATUSES: RequestStatus[] = [
+  REQUEST_STATUS.pending,
+  REQUEST_STATUS.accepted,
+  REQUEST_STATUS.enRoute,
+  REQUEST_STATUS.arrived,
+  REQUEST_STATUS.inProgress,
+];
 
 // Status badge component
 const StatusBadge = ({ status }: { status: string }) => {
@@ -43,12 +73,10 @@ const StatusBadge = ({ status }: { status: string }) => {
 
   const { bg, text, icon: Icon } = config[status] || config.pending;
 
-  const formatStatus = (s: string) => s.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-
   return (
     <span className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium', bg, text)}>
       <Icon className="w-3.5 h-3.5" />
-      {formatStatus(status)}
+      {formatStatusLabel(status)}
     </span>
   );
 };
@@ -293,6 +321,110 @@ const RequestDetailModal = ({
   );
 };
 
+const LiveOperationsMap = ({ requests }: { requests: TowRequest[] }) => {
+  const activeRequests = useMemo(
+    () =>
+      requests.filter((request) =>
+        ACTIVE_REQUEST_STATUSES.includes(request.status)
+      ),
+    [requests]
+  );
+
+  const center = useMemo(() => {
+    const first = activeRequests.find(
+      (request) => request.pickup_location.latitude !== 0 || request.pickup_location.longitude !== 0
+    );
+
+    if (!first) {
+      return [5.6037, -0.187] as [number, number];
+    }
+
+    return [first.pickup_location.latitude, first.pickup_location.longitude] as [number, number];
+  }, [activeRequests]);
+
+  if (activeRequests.length === 0) {
+    return (
+      <div className="glass-card p-8 text-center">
+        <MapPin className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+        <p className="text-gray-500">No active requests to map right now.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-gray-900">Live Operations Map</h2>
+        <span className="text-xs text-gray-500">Auto-refresh with request updates</span>
+      </div>
+      <div className="h-[360px] overflow-hidden rounded-xl border border-gray-200">
+        <MapContainer center={center} zoom={12} style={{ height: '100%', width: '100%' }}>
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+
+          {activeRequests.map((request) => {
+            const pickup = [request.pickup_location.latitude, request.pickup_location.longitude] as [number, number];
+            const destination = [request.destination.latitude, request.destination.longitude] as [number, number];
+            const operator = request.operator_location
+              ? ([request.operator_location.latitude, request.operator_location.longitude] as [number, number])
+              : null;
+
+            return (
+              <Fragment key={request.id}>
+                {(pickup[0] !== 0 || pickup[1] !== 0) && (
+                  <CircleMarker key={`${request.id}-pickup`} center={pickup} radius={8} pathOptions={{ color: '#16a34a' }}>
+                    <Popup>
+                      <div className="text-sm">
+                        <p className="font-semibold">{request.user_name}</p>
+                        <p>Pickup: {request.pickup_location.address}</p>
+                        <p>Status: {request.status}</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )}
+
+                {(destination[0] !== 0 || destination[1] !== 0) && (
+                  <CircleMarker
+                    key={`${request.id}-destination`}
+                    center={destination}
+                    radius={8}
+                    pathOptions={{ color: '#dc2626' }}
+                  >
+                    <Popup>
+                      <div className="text-sm">
+                        <p className="font-semibold">Destination</p>
+                        <p>{request.destination.address}</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )}
+
+                {operator && (operator[0] !== 0 || operator[1] !== 0) && (
+                  <CircleMarker key={`${request.id}-operator`} center={operator} radius={7} pathOptions={{ color: '#2563eb' }}>
+                    <Popup>
+                      <div className="text-sm">
+                        <p className="font-semibold">{request.operator_name || 'Assigned operator'}</p>
+                        <p>ETA: {request.eta_minutes ?? 'N/A'} min</p>
+                        <p>Progress: {request.route_progress_percent ?? 0}%</p>
+                      </div>
+                    </Popup>
+                  </CircleMarker>
+                )}
+
+                {(pickup[0] !== 0 || pickup[1] !== 0) && (destination[0] !== 0 || destination[1] !== 0) && (
+                  <Polyline key={`${request.id}-route`} positions={[pickup, destination]} pathOptions={{ color: '#f59e0b', weight: 2 }} />
+                )}
+              </Fragment>
+            );
+          })}
+        </MapContainer>
+      </div>
+    </div>
+  );
+};
+
 export default function RequestsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
@@ -308,6 +440,7 @@ export default function RequestsPage() {
   const { data: requests = [], isLoading } = useQuery({
     queryKey: ['requests'],
     queryFn: requestsApi.getAll,
+    refetchInterval: 15000,
   });
 
   const interventionMutation = useMutation({
@@ -364,10 +497,10 @@ export default function RequestsPage() {
 
   const statusCounts = {
     all: requests.length,
-    pending: requests.filter((r) => r.status === 'pending').length,
-    in_progress: requests.filter((r) => r.status === 'in_progress').length,
-    completed: requests.filter((r) => r.status === 'completed').length,
-    cancelled: requests.filter((r) => r.status === 'cancelled').length,
+    pending: requests.filter((r) => r.status === REQUEST_STATUS.pending).length,
+    in_progress: requests.filter((r) => r.status === REQUEST_STATUS.inProgress).length,
+    completed: requests.filter((r) => r.status === REQUEST_STATUS.completed).length,
+    cancelled: requests.filter((r) => r.status === REQUEST_STATUS.cancelled).length,
   };
 
   const formatTime = (dateString: string) => {
@@ -458,7 +591,7 @@ export default function RequestsPage() {
 
       {/* Status Filter Tabs */}
       <div className="flex flex-wrap gap-2">
-        {(['all', 'pending', 'in_progress', 'completed', 'cancelled'] as FilterStatus[]).map((status) => (
+        {REQUEST_FILTERS.map((status) => (
           <button
             key={status}
             onClick={() => {
@@ -472,7 +605,7 @@ export default function RequestsPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             )}
           >
-            {status === 'all' ? 'All' : status.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+            {status === 'all' ? 'All' : formatStatusLabel(status)}
             <span className="ml-2 px-1.5 py-0.5 rounded-md bg-dark-900/30 text-xs">
               {statusCounts[status as keyof typeof statusCounts] || 0}
             </span>
@@ -493,6 +626,8 @@ export default function RequestsPage() {
           />
         </div>
       </div>
+
+      <LiveOperationsMap requests={requests} />
 
       {/* Requests Table */}
       <div className="glass-card overflow-hidden">

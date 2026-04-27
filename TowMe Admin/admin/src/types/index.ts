@@ -1,12 +1,23 @@
+import type {
+  AdminRole,
+  NotificationSeverity,
+  NotificationTarget,
+  NotificationType,
+  OperatorStatus,
+  PaymentStatus,
+  RequestInterventionAction,
+  RequestPaymentStatus,
+  RequestStatus,
+  SupportCategory,
+  SupportPriority,
+  SupportStatus,
+  UserModerationAction,
+  UserModerationStatus,
+  UserRole,
+} from '../lib/contracts';
+
 // Admin user roles
-export type AdminRole =
-  | 'super_admin'
-  | 'ops_admin'
-  | 'support_admin'
-  | 'finance_admin'
-  | 'risk_admin'
-  | 'operator_manager'
-  | 'support_staff';
+export type { AdminRole, RequestInterventionAction, RequestStatus, UserModerationAction };
 
 export interface AdminUser {
   id: string;
@@ -25,7 +36,7 @@ export interface Operator {
   full_name: string;
   email: string;
   phone: string;
-  status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  status: OperatorStatus;
   profile_photo_url?: string;
   ghana_card_url?: string;
   drivers_license_url?: string;
@@ -50,9 +61,9 @@ export interface AppUser {
   phone?: string;
   full_name: string;
   avatar_url?: string;
-  role: 'user' | 'operator';
+  role: UserRole;
   is_active: boolean;
-  moderation_status?: 'active' | 'soft_banned' | 'permanently_banned';
+  moderation_status?: UserModerationStatus;
   ban_reason?: string;
   banned_at?: string;
   total_trips: number;
@@ -60,24 +71,7 @@ export interface AppUser {
   last_login?: string;
 }
 
-export type UserModerationAction = 'soft_ban' | 'permanent_ban' | 'unblock' | 'reset_auth';
-
 // Tow Request types
-export type RequestStatus = 
-  | 'pending' 
-  | 'accepted' 
-  | 'en_route' 
-  | 'arrived' 
-  | 'in_progress' 
-  | 'completed' 
-  | 'cancelled';
-
-export type RequestInterventionAction =
-  | 'cancel'
-  | 'reassign'
-  | 'escalate'
-  | 'mark_fraud'
-  | 'emergency_override';
 
 export interface TowRequest {
   id: string;
@@ -106,7 +100,7 @@ export interface TowRequest {
   estimated_price: number;
   final_price?: number;
   distance_km: number;
-  payment_status?: 'pending' | 'paid' | 'refunded';
+  payment_status?: RequestPaymentStatus;
   payment_method?: string;
   created_at: string;
   accepted_at?: string;
@@ -119,6 +113,15 @@ export interface TowRequest {
   is_fraud_suspected?: boolean;
   emergency_override?: boolean;
   intervention_notes?: string;
+  eta_minutes?: number;
+  route_progress_percent?: number;
+  operator_location?: {
+    latitude: number;
+    longitude: number;
+    heading?: number;
+    speed_kmh?: number;
+    updated_at?: string;
+  };
 }
 
 // Vehicle Pricing types
@@ -187,10 +190,53 @@ export interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'info' | 'warning' | 'success' | 'error';
-  target: 'all' | 'users' | 'operators';
+  type: NotificationType;
+  target: NotificationTarget;
   is_read: boolean;
+  read_at?: string;
+  severity?: NotificationSeverity;
+  action_url?: string;
   created_at: string;
+}
+
+export interface AdminSettings {
+  profile: {
+    name: string;
+    email: string;
+    phone?: string;
+    avatar_url?: string | null;
+  };
+  notifications: {
+    emailNotifications: boolean;
+    pushNotifications: boolean;
+    newOperators: boolean;
+    newRequests: boolean;
+    payments: boolean;
+    systemAlerts: boolean;
+  };
+  system: {
+    language: string;
+    timezone: string;
+    currency: string;
+  };
+}
+
+export interface AuditLogRecord {
+  id: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  actor_id?: string;
+  before?: unknown;
+  after?: unknown;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface RevenuePoint {
+  date: string;
+  revenue: number;
+  trips: number;
 }
 
 // Support Ticket types
@@ -201,9 +247,9 @@ export interface SupportTicket {
   user_email?: string;
   subject: string;
   message: string;
-  category: 'general' | 'payment' | 'technical' | 'complaint' | 'dispute';
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
+  category: SupportCategory;
+  status: SupportStatus;
+  priority: SupportPriority;
   assigned_to?: string;
   assigned_to_name?: string;
   linked_request_id?: string;
@@ -223,7 +269,7 @@ export interface Payment {
   user_id: string;
   operator_id: string;
   amount: number;
-  status: 'pending' | 'completed' | 'refunded' | 'failed';
+  status: PaymentStatus;
   payment_method: string;
   transaction_reference?: string;
   refund_reason?: string;

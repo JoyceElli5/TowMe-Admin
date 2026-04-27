@@ -23,6 +23,7 @@ import type { AppUser } from '../types';
 export default function UsersPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const itemsPerPage = 10;
   const queryClient = useQueryClient();
   const { hasPermission, adminUser } = useAuth();
@@ -62,6 +63,18 @@ export default function UsersPage() {
       });
 
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      setFeedback({
+        type: 'success',
+        message:
+          variables.action === 'unblock'
+            ? `${variables.user.full_name} has been unblocked.`
+            : variables.action === 'soft_ban'
+              ? `${variables.user.full_name} has been soft-banned.`
+              : `${variables.user.full_name} has been permanently banned.`,
+      });
+    },
+    onError: (error) => {
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'User action failed.' });
     },
   });
 
@@ -74,6 +87,11 @@ export default function UsersPage() {
         resourceId: user.id,
         metadata: { source: 'admin-web' },
       });
+      await queryClient.invalidateQueries({ queryKey: ['users'] });
+      setFeedback({ type: 'success', message: `Auth reset flow triggered for ${user.full_name}.` });
+    },
+    onError: (error) => {
+      setFeedback({ type: 'error', message: error instanceof Error ? error.message : 'Reset auth failed.' });
     },
   });
 
@@ -146,6 +164,27 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
+      {feedback && (
+        <div
+          className={cn(
+            'rounded-xl border px-4 py-3 text-sm',
+            feedback.type === 'success'
+              ? 'border-green-200 bg-green-50 text-green-700'
+              : 'border-red-200 bg-red-50 text-red-700'
+          )}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <span>{feedback.message}</span>
+            <button
+              onClick={() => setFeedback(null)}
+              className="text-xs font-medium opacity-80 hover:opacity-100"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>

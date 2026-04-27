@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -20,11 +20,81 @@ import {
 import { cn } from '../lib/utils';
 import { operatorsApi } from '../lib/api';
 import type { Operator } from '../types';
+import { OPERATOR_STATUSES } from '../lib/contracts';
+import type { OperatorStatus as ContractOperatorStatus } from '../lib/contracts';
+import { formatStatusLabel } from '../lib/status-label';
 import { useAuth } from '../contexts/AuthContext';
 import { logAuditEvent } from '../lib/audit';
+import { supabase } from '../lib/supabase';
 
-type OperatorStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'suspended';
+type OperatorStatus = 'all' | ContractOperatorStatus;
 type OperatorAction = 'approve' | 'reject' | 'suspend' | 'reactivate';
+
+const OPERATOR_STATUS = {
+  pending: OPERATOR_STATUSES[0],
+  approved: OPERATOR_STATUSES[1],
+  rejected: OPERATOR_STATUSES[2],
+  suspended: OPERATOR_STATUSES[3],
+} as const;
+
+const OPERATOR_FILTERS: OperatorStatus[] = [
+  'all',
+  OPERATOR_STATUS.pending,
+  OPERATOR_STATUS.approved,
+  OPERATOR_STATUS.rejected,
+  OPERATOR_STATUS.suspended,
+];
+
+const COMMON_DOCUMENT_BUCKETS = [
+  'operator_documents',
+  'operator-documents',
+  'operatordocuments',
+  'operator_docs',
+  'documents',
+] as const;
+
+const OPERATOR_DOCUMENT_BUCKET = 'operator_documents';
+type OperatorDocumentKey = 'ghana_card' | 'drivers_license' | 'vehicle_registration' | 'insurance';
+
+function buildDocumentUrlCandidates(url?: string | null): string[] {
+  if (!url) {
+    return [];
+  }
+
+  const candidates: string[] = [url];
+  const publicPrefix = '/storage/v1/object/public/';
+  const publicIndex = url.indexOf(publicPrefix);
+
+  if (publicIndex === -1) {
+    return candidates;
+  }
+
+  const base = url.slice(0, publicIndex + publicPrefix.length);
+  const remainder = url.slice(publicIndex + publicPrefix.length);
+  const firstSlash = remainder.indexOf('/');
+
+  if (firstSlash === -1) {
+    return candidates;
+  }
+
+  const bucket = remainder.slice(0, firstSlash);
+  const objectPath = remainder.slice(firstSlash + 1);
+  const bucketVariants = new Set<string>([
+    bucket,
+    bucket.replace(/_/g, '-'),
+    bucket.replace(/-/g, '_'),
+    ...COMMON_DOCUMENT_BUCKETS,
+  ]);
+
+  bucketVariants.forEach((bucketVariant) => {
+    const candidate = `${base}${bucketVariant}/${objectPath}`;
+    if (!candidates.includes(candidate)) {
+      candidates.push(candidate);
+    }
+  });
+
+  return candidates;
+}
 
 // Status badge component
 const StatusBadge = ({ status }: { status: string }) => {
@@ -40,7 +110,7 @@ const StatusBadge = ({ status }: { status: string }) => {
   return (
     <span className={cn('flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium', config.bg, config.text)}>
       <Icon className="w-3.5 h-3.5" />
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {formatStatusLabel(status)}
     </span>
   );
 };
@@ -55,16 +125,155 @@ const DocumentModal = ({
   onClose: () => void;
   operator: Operator | null;
 }) => {
-  const [activeDoc, setActiveDoc] = useState<string>('ghana_card');
-
-  if (!operator) return null;
+  const [activeDoc, setActiveDoc] = useState<OperatorDocumentKey>('ghana_card');
+  const [docUrlIndex, setDocUrlIndex] = useState<Record<OperatorDocumentKey, number>>({} as Record<OperatorDocumentKey, number>);
+  const [resolvedDocUrls, setResolvedDocUrls] = useState<Record<OperatorDocumentKey, string>>({} as Record<OperatorDocumentKey, string>);
+  const [isResolvingDocuments, setIsResolvingDocuments] = useState(false);
 
   const documents = [
-    { key: 'ghana_card', label: 'Ghana Card', url: operator.ghana_card_url },
-    { key: 'drivers_license', label: "Driver's License", url: operator.drivers_license_url },
-    { key: 'vehicle_registration', label: 'Vehicle Registration', url: operator.vehicle_registration_url },
-    { key: 'insurance', label: 'Insurance', url: operator.insurance_url },
+    {
+      key: 'ghana_card',
+      label: 'Ghana Card',
+      url: resolvedDocUrls.ghana_card || operator?.ghana_card_url,
+    },
+    {
+      key: 'drivers_license',
+      label: "Driver's License",
+      url: resolvedDocUrls.drivers_license || operator?.drivers_license_url,
+    },
+    {
+      key: 'vehicle_registration',
+      label: 'Vehicle Registration',
+      url: resolvedDocUrls.vehicle_registration || operator?.vehicle_registration_url,
+    },
+    {
+      key: 'insurance',
+      label: 'Insurance',
+      url: resolvedDocUrls.insurance || operator?.insurance_url,
+    },
   ];
+
+  const selectedDocument = documents.find((d) => d.key === activeDoc);
+  const selectedDocumentUrlCandidates = buildDocumentUrlCandidates(selectedDocument?.url);
+  const selectedDocumentAttemptIndex = docUrlIndex[activeDoc] || 0;
+  const activeImageUrl = selectedDocumentUrlCandidates[selectedDocumentAttemptIndex];
+
+  const handleSelectDocument = (docKey: OperatorDocumentKey) => {
+    setActiveDoc(docKey);
+    setDocUrlIndex((previous) => ({ ...previous, [docKey]: 0 }));
+  };
+
+  const handleDocumentImageError = () => {
+    const nextIndex = selectedDocumentAttemptIndex + 1;
+    if (nextIndex < selectedDocumentUrlCandidates.length) {
+      setDocUrlIndex((previous) => ({ ...previous, [activeDoc]: nextIndex }));
+    } else {
+      setDocUrlIndex((previous) => ({ ...previous, [activeDoc]: selectedDocumentUrlCandidates.length }));
+    }
+  };
+
+  useEffect(() => {
+    setResolvedDocUrls({} as Record<OperatorDocumentKey, string>);
+    setDocUrlIndex({} as Record<OperatorDocumentKey, number>);
+    setActiveDoc('ghana_card');
+
+    if (!isOpen || !operator) {
+      return;
+    }
+
+    const ownerFolder = operator.user_id || operator.id;
+    if (!ownerFolder) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const resolveFromStorageFolder = async () => {
+      setIsResolvingDocuments(true);
+      try {
+        const { data, error } = await supabase.storage
+          .from(OPERATOR_DOCUMENT_BUCKET)
+          .list(ownerFolder, {
+            limit: 100,
+            offset: 0,
+            sortBy: { column: 'name', order: 'desc' },
+          });
+
+        if (error || !data?.length) {
+          return;
+        }
+
+        const normalized = data
+          .filter((file) => Boolean(file.name))
+          .map((file) => ({
+            name: file.name,
+            lowerName: file.name.toLowerCase(),
+          }));
+
+        const pickFile = (keyword: string) =>
+          normalized.find((file) => file.lowerName.includes(keyword))?.name;
+
+        const candidates: Record<OperatorDocumentKey, string | undefined> = {
+          ghana_card: pickFile('ghana_card'),
+          drivers_license: pickFile('drivers_license') || pickFile('license'),
+          vehicle_registration:
+            pickFile('vehicle_registration') || pickFile('registration') || pickFile('vehicle'),
+          insurance: pickFile('insurance'),
+        };
+
+        const nextResolved: Record<OperatorDocumentKey, string> = {} as Record<OperatorDocumentKey, string>;
+        for (const [docType, fileName] of Object.entries(candidates)) {
+          if (!fileName) {
+            continue;
+          }
+
+          const filePath = `${ownerFolder}/${fileName}`;
+          const { data: signedData, error: signedError } = await supabase.storage
+            .from(OPERATOR_DOCUMENT_BUCKET)
+            .createSignedUrl(filePath, 60 * 60);
+
+          if (!signedError && signedData?.signedUrl) {
+            nextResolved[docType as OperatorDocumentKey] = signedData.signedUrl;
+            continue;
+          }
+
+          const { data: publicData } = supabase.storage
+            .from(OPERATOR_DOCUMENT_BUCKET)
+            .getPublicUrl(filePath);
+
+          if (publicData?.publicUrl) {
+            nextResolved[docType as OperatorDocumentKey] = publicData.publicUrl;
+          }
+        }
+
+        if (isMounted && Object.keys(nextResolved).length > 0) {
+          setResolvedDocUrls(nextResolved);
+        }
+      } catch {
+        // Keep modal usable even if storage lookup fails.
+      } finally {
+        if (isMounted) {
+          setIsResolvingDocuments(false);
+        }
+      }
+    };
+
+    void resolveFromStorageFolder();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    isOpen,
+    operator?.id,
+    operator?.user_id,
+    operator?.ghana_card_url,
+    operator?.drivers_license_url,
+    operator?.vehicle_registration_url,
+    operator?.insurance_url,
+  ]);
+
+  if (!operator) return null;
 
   return (
     <AnimatePresence>
@@ -76,34 +285,34 @@ const DocumentModal = ({
           exit={{ opacity: 0 }}
         >
           {/* Backdrop */}
-          <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+          <div className="absolute inset-0 bg-slate-950" onClick={onClose} />
 
-          {/* Modal */}
+            {/* Modal */}
           <motion.div
-            className="relative bg-dark-800 rounded-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden shadow-xl"
+            className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden shadow-xl"
             initial={{ scale: 0.95, y: 20 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.95, y: 20 }}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-dark-700">
+            <div className="flex items-center justify-between p-6 border-b border-slate-700">
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-dark-700 overflow-hidden">
+                <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden">
                   {operator.profile_photo_url ? (
                     <img src={operator.profile_photo_url} alt={operator.full_name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-dark-400" />
+                      <User className="w-6 h-6 text-slate-400" />
                     </div>
                   )}
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold text-white">{operator.full_name}</h2>
-                  <p className="text-dark-400 text-sm">{operator.email}</p>
+                  <p className="text-slate-400 text-sm">{operator.email}</p>
                 </div>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-dark-700 rounded-lg transition-colors">
-                <X className="w-5 h-5 text-dark-400" />
+              <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
+                <X className="w-5 h-5 text-slate-400" />
               </button>
             </div>
 
@@ -111,15 +320,15 @@ const DocumentModal = ({
             <div className="p-6">
               {/* Operator Info */}
               <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="bg-dark-700/50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-dark-400 mb-1">
+                <div className="bg-slate-800 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-slate-400 mb-1">
                     <Phone className="w-4 h-4" />
                     <span className="text-sm">Phone</span>
                   </div>
                   <p className="text-white font-medium">{operator.phone}</p>
                 </div>
-                <div className="bg-dark-700/50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-dark-400 mb-1">
+                <div className="bg-slate-800 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-slate-400 mb-1">
                     <Calendar className="w-4 h-4" />
                     <span className="text-sm">Registered</span>
                   </div>
@@ -127,8 +336,8 @@ const DocumentModal = ({
                     {new Date(operator.created_at).toLocaleDateString()}
                   </p>
                 </div>
-                <div className="bg-dark-700/50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 text-dark-400 mb-1">
+                <div className="bg-slate-800 rounded-xl p-4">
+                  <div className="flex items-center gap-2 text-slate-400 mb-1">
                     <Shield className="w-4 h-4" />
                     <span className="text-sm">Status</span>
                   </div>
@@ -137,16 +346,16 @@ const DocumentModal = ({
               </div>
 
               {/* Document Tabs */}
-              <div className="flex gap-2 mb-4 border-b border-dark-700 pb-4">
+              <div className="flex gap-2 mb-4 border-b border-slate-700 pb-4">
                 {documents.map((doc) => (
                   <button
-                    key={doc.key}
-                    onClick={() => setActiveDoc(doc.key)}
+                    key={doc.key as OperatorDocumentKey}
+                    onClick={() => handleSelectDocument(doc.key as OperatorDocumentKey)}
                     className={cn(
                       'px-4 py-2 rounded-lg text-sm font-medium transition-colors',
                       activeDoc === doc.key
-                        ? 'bg-primary-500 text-dark-900'
-                        : 'bg-dark-700 text-dark-300 hover:bg-dark-600'
+                        ? 'bg-primary-500 text-white'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                     )}
                   >
                     {doc.label}
@@ -155,22 +364,28 @@ const DocumentModal = ({
               </div>
 
               {/* Document Viewer */}
-              <div className="bg-dark-700 rounded-xl h-80 flex items-center justify-center">
-                {documents.find((d) => d.key === activeDoc)?.url ? (
-                  <div className="text-center">
-                    <FileText className="w-16 h-16 text-dark-500 mx-auto mb-4" />
-                    <p className="text-dark-400 mb-2">Document: {documents.find((d) => d.key === activeDoc)?.label}</p>
-                    <p className="text-primary-500 text-sm">
-                      {documents.find((d) => d.key === activeDoc)?.url}
-                    </p>
-                    <p className="text-dark-500 text-xs mt-2">
-                      (In production, this would display the actual document image)
-                    </p>
-                  </div>
+              <div className="bg-slate-800 rounded-xl h-80 overflow-hidden">
+                {selectedDocument?.url ? (
+                  activeImageUrl ? (
+                    <img
+                      src={activeImageUrl}
+                      alt={`${operator.full_name} ${selectedDocument.label}`}
+                      className="w-full h-full object-contain bg-slate-900"
+                      onError={handleDocumentImageError}
+                    />
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                      <FileText className="w-16 h-16 text-slate-500 mx-auto mb-4" />
+                      <p className="text-slate-300 mb-2">Could not load image preview for this document.</p>
+                      <p className="text-slate-500 text-sm">Please confirm the storage bucket and file path for this upload.</p>
+                    </div>
+                  )
                 ) : (
-                  <div className="text-center">
-                    <FileText className="w-16 h-16 text-dark-500 mx-auto mb-4" />
-                    <p className="text-dark-400">No document uploaded</p>
+                  <div className="h-full flex flex-col items-center justify-center text-center">
+                    <FileText className="w-16 h-16 text-slate-500 mx-auto mb-4" />
+                    <p className="text-slate-300">
+                      {isResolvingDocuments ? 'Loading document preview...' : 'No document uploaded'}
+                    </p>
                   </div>
                 )}
               </div>
@@ -254,9 +469,9 @@ const ApprovalModal = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
-          <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+          <div className="absolute inset-0 bg-slate-950" onClick={onClose} />
           <motion.div
-            className="relative bg-dark-800 rounded-2xl w-full max-w-md mx-4 p-6"
+            className="relative bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md mx-4 p-6"
             initial={{ scale: 0.95, y: 20 }}
             animate={{ scale: 1, y: 0 }}
             exit={{ scale: 0.95, y: 20 }}
@@ -270,7 +485,7 @@ const ApprovalModal = ({
             <h3 className="text-xl font-semibold text-white text-center mb-2">
               {config.title}
             </h3>
-            <p className="text-dark-400 text-center mb-6">
+            <p className="text-slate-300 text-center mb-6">
               Are you sure you want to {action} <span className="text-white font-medium">{operator.full_name}</span>?
               {' '}
               {config.description}
@@ -279,7 +494,7 @@ const ApprovalModal = ({
               <button
                 onClick={onClose}
                 disabled={isLoading}
-                className="flex-1 py-3 px-4 rounded-xl bg-dark-700 text-white font-medium hover:bg-dark-600 transition-colors disabled:opacity-50"
+                className="flex-1 py-3 px-4 rounded-xl bg-slate-800 text-white font-medium hover:bg-slate-700 transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
@@ -431,10 +646,10 @@ export default function OperatorsPage() {
 
   const statusCounts = {
     all: operators.length,
-    pending: operators.filter((o) => o.status === 'pending').length,
-    approved: operators.filter((o) => o.status === 'approved').length,
-    rejected: operators.filter((o) => o.status === 'rejected').length,
-    suspended: operators.filter((o) => o.status === 'suspended').length,
+    pending: operators.filter((o) => o.status === OPERATOR_STATUS.pending).length,
+    approved: operators.filter((o) => o.status === OPERATOR_STATUS.approved).length,
+    rejected: operators.filter((o) => o.status === OPERATOR_STATUS.rejected).length,
+    suspended: operators.filter((o) => o.status === OPERATOR_STATUS.suspended).length,
   };
 
   return (
@@ -452,7 +667,7 @@ export default function OperatorsPage() {
 
         {/* Status Filter Tabs */}
         <div className="flex gap-2">
-          {(['all', 'pending', 'approved', 'rejected', 'suspended'] as OperatorStatus[]).map((status) => (
+          {OPERATOR_FILTERS.map((status) => (
             <button
               key={status}
               onClick={() => setStatusFilter(status)}
@@ -463,7 +678,7 @@ export default function OperatorsPage() {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               )}
             >
-              {status.charAt(0).toUpperCase() + status.slice(1)}
+              {status === 'all' ? 'All' : formatStatusLabel(status)}
               <span className="ml-2 px-1.5 py-0.5 rounded-md bg-gray-200 text-xs text-gray-600">
                 {statusCounts[status]}
               </span>
@@ -589,7 +804,7 @@ export default function OperatorsPage() {
                         >
                           <Eye className="w-5 h-5" />
                         </button>
-                        {operator.status === 'pending' && (
+                        {operator.status === OPERATOR_STATUS.pending && (
                           <>
                             <button
                               onClick={() => handleLifecycleAction(operator, 'approve')}
@@ -609,7 +824,7 @@ export default function OperatorsPage() {
                             </button>
                           </>
                         )}
-                        {operator.status === 'approved' && (
+                        {operator.status === OPERATOR_STATUS.approved && (
                           <button
                             onClick={() => handleLifecycleAction(operator, 'suspend')}
                             disabled={!canSuspendOperators}
@@ -619,7 +834,7 @@ export default function OperatorsPage() {
                             <AlertTriangle className="w-5 h-5" />
                           </button>
                         )}
-                        {operator.status === 'suspended' && (
+                        {operator.status === OPERATOR_STATUS.suspended && (
                           <button
                             onClick={() => handleLifecycleAction(operator, 'reactivate')}
                             disabled={!canSuspendOperators}

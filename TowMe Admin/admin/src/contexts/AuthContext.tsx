@@ -1,7 +1,7 @@
  import { createContext, useContext, useEffect, useState } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase, isDemoMode } from '../lib/supabase';
-import { backendApi } from '../lib/backend-api';
+import { backendApi, resolveBackendAssetUrl } from '../lib/backend-api';
 import type { AdminUser, AdminRole } from '../types';
 import type { AdminPermission } from '../lib/rbac';
 import { roleHasAnyPermission, roleHasPermission } from '../lib/rbac';
@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: data.email,
           name: data.name,
           role: data.role as AdminRole,
-          avatar_url: data.avatar_url,
+          avatar_url: resolveBackendAssetUrl(data.avatar_url),
           created_at: data.created_at,
           last_login: data.last_login,
         });

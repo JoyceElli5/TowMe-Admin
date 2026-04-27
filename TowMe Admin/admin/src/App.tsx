@@ -1,27 +1,35 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimatePresence } from 'framer-motion';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import LandingPage from './pages/LandingPage';
-import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
-import OperatorsPage from './pages/OperatorsPage';
-import UsersPage from './pages/UsersPage';
-import RequestsPage from './pages/RequestsPage';
-import PricingPage from './pages/PricingPage';
-import NotificationsPage from './pages/NotificationsPage';
-import PaymentsPage from './pages/PaymentsPage';
-import SupportPage from './pages/SupportPage';
-import SettingsPage from './pages/SettingsPage';
-import UnauthorizedPage from './pages/UnauthorizedPage';
 import DashboardLayout from './components/DashboardLayout';
 import PageTransition from './components/PageTransition';
 import type { AdminPermission } from './lib/rbac';
 
 const queryClient = new QueryClient();
+
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const DashboardPage = lazy(() => import('./pages/DashboardPage'));
+const OperatorsPage = lazy(() => import('./pages/OperatorsPage'));
+const UsersPage = lazy(() => import('./pages/UsersPage'));
+const RequestsPage = lazy(() => import('./pages/RequestsPage'));
+const PricingPage = lazy(() => import('./pages/PricingPage'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const PaymentsPage = lazy(() => import('./pages/PaymentsPage'));
+const SupportPage = lazy(() => import('./pages/SupportPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
+const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
+
+const RouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+  </div>
+);
 
 // Protected Route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -63,12 +71,14 @@ function AnimatedRoutes() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <RouteFallback />;
   }
+
+  const renderRoute = (element: React.ReactNode) => (
+    <Suspense fallback={<RouteFallback />}>
+      <PageTransition>{element}</PageTransition>
+    </Suspense>
+  );
 
   return (
     <AnimatePresence mode="wait">
@@ -77,11 +87,7 @@ function AnimatedRoutes() {
         <Route 
           path="/" 
           element={
-            user ? <Navigate to="/dashboard" replace /> : (
-              <PageTransition>
-                <LandingPage />
-              </PageTransition>
-            )
+            user ? <Navigate to="/dashboard" replace /> : renderRoute(<LandingPage />)
           } 
         />
         
@@ -89,11 +95,7 @@ function AnimatedRoutes() {
         <Route 
           path="/login" 
           element={
-            user ? <Navigate to="/dashboard" replace /> : (
-              <PageTransition>
-                <LoginPage />
-              </PageTransition>
-            )
+            user ? <Navigate to="/dashboard" replace /> : renderRoute(<LoginPage />)
           } 
         />
         
@@ -109,7 +111,9 @@ function AnimatedRoutes() {
             path="dashboard"
             element={
               <AuthorizedRoute permission="dashboard.view">
-                <DashboardPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <DashboardPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -117,7 +121,9 @@ function AnimatedRoutes() {
             path="operators"
             element={
               <AuthorizedRoute permission="operators.view">
-                <OperatorsPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <OperatorsPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -125,7 +131,9 @@ function AnimatedRoutes() {
             path="users"
             element={
               <AuthorizedRoute permission="users.view">
-                <UsersPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <UsersPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -133,7 +141,9 @@ function AnimatedRoutes() {
             path="requests"
             element={
               <AuthorizedRoute permission="requests.view">
-                <RequestsPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <RequestsPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -141,7 +151,9 @@ function AnimatedRoutes() {
             path="pricing"
             element={
               <AuthorizedRoute permission="pricing.view">
-                <PricingPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <PricingPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -149,7 +161,9 @@ function AnimatedRoutes() {
             path="notifications"
             element={
               <AuthorizedRoute permission="notifications.view">
-                <NotificationsPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <NotificationsPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -157,7 +171,9 @@ function AnimatedRoutes() {
             path="payments"
             element={
               <AuthorizedRoute permission="finance.view">
-                <PaymentsPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <PaymentsPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -165,7 +181,9 @@ function AnimatedRoutes() {
             path="support"
             element={
               <AuthorizedRoute permission="support.view">
-                <SupportPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <SupportPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
@@ -173,11 +191,30 @@ function AnimatedRoutes() {
             path="settings"
             element={
               <AuthorizedRoute permission="settings.view">
-                <SettingsPage />
+                <Suspense fallback={<RouteFallback />}>
+                  <SettingsPage />
+                </Suspense>
               </AuthorizedRoute>
             }
           />
-          <Route path="unauthorized" element={<UnauthorizedPage />} />
+          <Route
+            path="audit-logs"
+            element={
+              <AuthorizedRoute permission="audit.view">
+                <Suspense fallback={<RouteFallback />}>
+                  <AuditLogsPage />
+                </Suspense>
+              </AuthorizedRoute>
+            }
+          />
+          <Route
+            path="unauthorized"
+            element={
+              <Suspense fallback={<RouteFallback />}>
+                <UnauthorizedPage />
+              </Suspense>
+            }
+          />
         </Route>
         
         <Route path="*" element={<Navigate to="/" replace />} />

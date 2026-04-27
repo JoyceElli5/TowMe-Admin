@@ -1,8 +1,12 @@
 import { supabase, isDemoMode } from './supabase';
-import { backendApi } from './backend-api';
+import { backendApi, resolveBackendAssetUrl } from './backend-api';
 import type {
   Operator,
   AppUser,
+  Notification,
+  AdminSettings,
+  RevenuePoint,
+  AuditLogRecord,
   SupportTicket,
   TowRequest,
   PricingConfig,
@@ -10,6 +14,94 @@ import type {
   RequestInterventionAction,
   UserModerationAction,
 } from '../types';
+import {
+  OPERATOR_STATUSES,
+  PAYMENT_STATUSES,
+  REQUEST_STATUSES,
+  SUPPORT_PRIORITIES,
+  SUPPORT_STATUSES,
+} from './contracts';
+import type {
+  OperatorStatus,
+  PaymentStatus,
+  SupportPriority,
+  SupportStatus,
+} from './contracts';
+
+const REQUEST_STATUS = {
+  pending: REQUEST_STATUSES[0],
+  accepted: REQUEST_STATUSES[1],
+  enRoute: REQUEST_STATUSES[2],
+  arrived: REQUEST_STATUSES[3],
+  inProgress: REQUEST_STATUSES[4],
+  completed: REQUEST_STATUSES[5],
+  cancelled: REQUEST_STATUSES[6],
+} as const;
+
+const OPERATOR_STATUS = {
+  pending: OPERATOR_STATUSES[0],
+  approved: OPERATOR_STATUSES[1],
+  rejected: OPERATOR_STATUSES[2],
+  suspended: OPERATOR_STATUSES[3],
+} as const;
+
+const SUPPORT_STATUS = {
+  open: SUPPORT_STATUSES[0],
+  inProgress: SUPPORT_STATUSES[1],
+  resolved: SUPPORT_STATUSES[2],
+  closed: SUPPORT_STATUSES[3],
+} as const;
+
+const SUPPORT_PRIORITY = {
+  low: SUPPORT_PRIORITIES[0],
+  medium: SUPPORT_PRIORITIES[1],
+  high: SUPPORT_PRIORITIES[2],
+  urgent: SUPPORT_PRIORITIES[3],
+} as const;
+
+function backendFlowError(context: string, error?: unknown): Error {
+  const details = error instanceof Error ? error.message : String(error || 'unknown error');
+  return new Error(`${context}. Backend flow is required. Details: ${details}`);
+}
+function getDefaultAdminSettings(): AdminSettings {
+  return {
+    profile: {
+      name: 'Admin User',
+      email: 'admin@towme.com',
+      phone: '',
+      avatar_url: null,
+    },
+    notifications: {
+      emailNotifications: true,
+      pushNotifications: true,
+      newOperators: true,
+      newRequests: true,
+      payments: true,
+      systemAlerts: true,
+    },
+    system: {
+      language: 'English',
+      timezone: 'Africa/Accra',
+      currency: 'GHS',
+    },
+  };
+}
+
+function readFromStorage(key: string): string | null {
+  if (typeof localStorage === 'undefined') {
+    return null;
+  }
+
+  return localStorage.getItem(key);
+}
+
+function writeToStorage(key: string, value: string): void {
+  if (typeof localStorage === 'undefined') {
+    return;
+  }
+
+  localStorage.setItem(key, value);
+}
 
 // ============================================================================
 // DEMO DATA - Used when Supabase is not configured
@@ -256,61 +348,6 @@ const demoRequests: TowRequest[] = [
   },
 ];
 
-const demoSupportTickets: SupportTicket[] = [
-  {
-    id: 'TKT-001',
-    user_id: '1',
-    user_name: 'Ama Serwaa',
-    user_email: 'ama.serwaa@email.com',
-    subject: 'Payment charged twice',
-    message: 'I was charged twice for one completed request and need a review.',
-    category: 'dispute',
-    status: 'open',
-    priority: 'urgent',
-    assigned_to: 'support-1',
-    assigned_to_name: 'Support Lead',
-    linked_request_id: '1',
-    linked_payment_id: 'PAY-001',
-    dispute_id: 'DSP-001',
-    sla_due_at: '2026-03-26T09:00:00Z',
-    created_at: '2026-03-25T09:30:00Z',
-    updated_at: '2026-03-25T09:30:00Z',
-  },
-  {
-    id: 'TKT-002',
-    user_id: '2',
-    user_name: 'Kofi Boateng',
-    user_email: 'kofi.boateng@email.com',
-    subject: 'Operator arrived late',
-    message: 'My tow request was delayed by over one hour with no notification.',
-    category: 'complaint',
-    status: 'in_progress',
-    priority: 'high',
-    assigned_to: 'support-2',
-    assigned_to_name: 'Ops Support',
-    linked_request_id: '2',
-    sla_due_at: '2026-03-25T18:00:00Z',
-    created_at: '2026-03-24T12:00:00Z',
-    updated_at: '2026-03-25T08:10:00Z',
-  },
-  {
-    id: 'TKT-003',
-    user_id: '3',
-    user_name: 'Akua Mensah',
-    user_email: 'akua.mensah@email.com',
-    subject: 'App crash at checkout',
-    message: 'The app closes every time I confirm payment on Android.',
-    category: 'technical',
-    status: 'resolved',
-    priority: 'medium',
-    assigned_to: 'support-3',
-    assigned_to_name: 'Technical Support',
-    resolution_summary: 'Escalated to mobile team; patch deployed and user confirmed fix.',
-    created_at: '2026-03-22T10:20:00Z',
-    updated_at: '2026-03-23T15:00:00Z',
-  },
-];
-
 const demoPricing: PricingConfig[] = [
   { id: '1', vehicle_type: 'Motorcycle', base_fee: 20, per_km_rate: 3, service_fee: 2, surge_multiplier: 1, zone_multiplier: 1, effective_from: '2026-01-01T00:00:00Z', is_active: true },
   { id: '2', vehicle_type: 'Saloon', base_fee: 50, per_km_rate: 5, service_fee: 5, surge_multiplier: 1, zone_multiplier: 1, effective_from: '2026-01-01T00:00:00Z', is_active: true },
@@ -337,8 +374,10 @@ export interface FinanceLedgerEntry {
   id: string;
   type: 'payment' | 'refund' | 'payout';
   amount: number;
-  status: 'completed' | 'pending' | 'failed';
+  status: Extract<PaymentStatus, 'completed' | 'pending' | 'failed'>;
   requestId: string;
+  userId?: string;
+  operatorId?: string;
   userName: string;
   operatorName: string;
   method: string;
@@ -347,75 +386,14 @@ export interface FinanceLedgerEntry {
   reason?: string;
 }
 
-const demoFinanceLedger: FinanceLedgerEntry[] = [
-  {
-    id: 'PAY-001',
-    type: 'payment',
-    amount: 150.0,
-    status: 'completed',
-    requestId: 'REQ-1234',
-    userName: 'Ama Serwaa',
-    operatorName: 'John Mensah',
-    method: 'Mobile Money',
-    date: '2026-02-05 14:30',
-  },
-  {
-    id: 'PAY-002',
-    type: 'payment',
-    amount: 200.0,
-    status: 'completed',
-    requestId: 'REQ-1233',
-    userName: 'Kofi Boateng',
-    operatorName: 'Kwame Asante',
-    method: 'Card',
-    date: '2026-02-05 12:15',
-  },
-  {
-    id: 'REF-003',
-    type: 'refund',
-    amount: 50.0,
-    status: 'completed',
-    requestId: 'REQ-1225',
-    userName: 'Akua Mensah',
-    operatorName: 'Yaw Frimpong',
-    method: 'Mobile Money',
-    date: '2026-02-04 16:45',
-    relatedPaymentId: 'PAY-001',
-  },
-  {
-    id: 'PAY-004',
-    type: 'payout',
-    amount: 850.0,
-    status: 'completed',
-    requestId: '-',
-    userName: '-',
-    operatorName: 'John Mensah',
-    method: 'Bank Transfer',
-    date: '2026-02-04 10:00',
-  },
-  {
-    id: 'PAY-005',
-    type: 'payment',
-    amount: 175.0,
-    status: 'pending',
-    requestId: 'REQ-1235',
-    userName: 'Kwesi Appiah',
-    operatorName: 'Samuel Osei',
-    method: 'Mobile Money',
-    date: '2026-02-05 15:00',
-  },
-  {
-    id: 'PAY-006',
-    type: 'payment',
-    amount: 125.0,
-    status: 'failed',
-    requestId: 'REQ-1236',
-    userName: 'Efua Owusu',
-    operatorName: 'John Mensah',
-    method: 'Card',
-    date: '2026-02-05 15:30',
-  },
-];
+export interface WalletBalanceEntry {
+  operatorKey: string;
+  operatorName: string;
+  totalPayments: number;
+  totalPayouts: number;
+  totalRefundAdjustments: number;
+  balance: number;
+}
 
 // ============================================================================
 // API FUNCTIONS - Returns demo data or real Supabase data
@@ -425,9 +403,9 @@ const demoFinanceLedger: FinanceLedgerEntry[] = [
 export const operatorsApi = {
   canTransitionStatus(
     currentStatus: Operator['status'],
-    nextStatus: 'approved' | 'rejected' | 'suspended'
+    nextStatus: Exclude<OperatorStatus, 'pending'>
   ): boolean {
-    const allowedTransitions: Record<Operator['status'], Array<'approved' | 'rejected' | 'suspended'>> = {
+    const allowedTransitions: Record<Operator['status'], Array<Exclude<OperatorStatus, 'pending'>>> = {
       pending: ['approved', 'rejected'],
       approved: ['suspended'],
       suspended: ['approved'],
@@ -448,12 +426,16 @@ export const operatorsApi = {
           full_name: op.full_name,
           email: op.email,
           phone: op.phone,
-          status: op.status || 'pending',
-          profile_photo_url: op.profile_photo_url,
-          ghana_card_url: op.documents?.find((d: any) => d.document_type === 'ghana_card')?.document_url,
-          drivers_license_url: op.documents?.find((d: any) => d.document_type === 'drivers_license')?.document_url,
-          vehicle_registration_url: op.documents?.find((d: any) => d.document_type === 'vehicle_registration')?.document_url,
-          insurance_url: op.documents?.find((d: any) => d.document_type === 'insurance')?.document_url,
+          status: op.status || OPERATOR_STATUSES[0],
+          profile_photo_url: resolveBackendAssetUrl(op.profile_photo_url) || undefined,
+          ghana_card_url:
+            resolveBackendAssetUrl(op.documents?.find((d: any) => d.document_type === 'ghana_card')?.document_url) || undefined,
+          drivers_license_url:
+            resolveBackendAssetUrl(op.documents?.find((d: any) => d.document_type === 'drivers_license')?.document_url) || undefined,
+          vehicle_registration_url:
+            resolveBackendAssetUrl(op.documents?.find((d: any) => d.document_type === 'vehicle_registration')?.document_url) || undefined,
+          insurance_url:
+            resolveBackendAssetUrl(op.documents?.find((d: any) => d.document_type === 'insurance')?.document_url) || undefined,
           rating: op.rating || 0,
           total_trips: op.total_trips || 0,
           earnings: op.earnings || 0,
@@ -463,7 +445,7 @@ export const operatorsApi = {
         }));
       }
     } catch (error) {
-      console.log('Backend API failed, falling back to demo data:', error);
+      console.warn('Backend operators request failed, falling back to Supabase.', error);
     }
 
     // Fallback to demo data
@@ -485,12 +467,12 @@ export const operatorsApi = {
       full_name: user.full_name,
       email: user.email,
       phone: user.phone,
-      status: user.verification_status || 'pending',
-      profile_photo_url: user.operator_photo_url || user.avatar_url,
-      ghana_card_url: user.ghana_card_photo_url,
-      drivers_license_url: user.drivers_license_photo_url,
-      vehicle_registration_url: user.vehicle_registration_photo_url,
-      insurance_url: user.insurance_photo_url,
+      status: user.verification_status || OPERATOR_STATUSES[0],
+      profile_photo_url: resolveBackendAssetUrl(user.operator_photo_url || user.avatar_url) || undefined,
+      ghana_card_url: resolveBackendAssetUrl(user.ghana_card_photo_url) || undefined,
+      drivers_license_url: resolveBackendAssetUrl(user.drivers_license_photo_url) || undefined,
+      vehicle_registration_url: resolveBackendAssetUrl(user.vehicle_registration_photo_url) || undefined,
+      insurance_url: resolveBackendAssetUrl(user.insurance_photo_url) || undefined,
       rating: user.average_rating || 0,
       total_trips: user.total_trips || 0,
       earnings: 0,
@@ -520,12 +502,12 @@ export const operatorsApi = {
       full_name: data.full_name,
       email: data.email,
       phone: data.phone,
-      status: data.verification_status || 'pending',
-      profile_photo_url: data.operator_photo_url || data.avatar_url,
-      ghana_card_url: data.ghana_card_photo_url,
-      drivers_license_url: data.drivers_license_photo_url,
-      vehicle_registration_url: data.vehicle_registration_photo_url,
-      insurance_url: data.insurance_photo_url,
+      status: data.verification_status || OPERATOR_STATUSES[0],
+      profile_photo_url: resolveBackendAssetUrl(data.operator_photo_url || data.avatar_url) || undefined,
+      ghana_card_url: resolveBackendAssetUrl(data.ghana_card_photo_url) || undefined,
+      drivers_license_url: resolveBackendAssetUrl(data.drivers_license_photo_url) || undefined,
+      vehicle_registration_url: resolveBackendAssetUrl(data.vehicle_registration_photo_url) || undefined,
+      insurance_url: resolveBackendAssetUrl(data.insurance_photo_url) || undefined,
       rating: data.average_rating || 0,
       total_trips: data.total_trips || 0,
       earnings: 0,
@@ -537,7 +519,7 @@ export const operatorsApi = {
 
   async updateStatus(
     id: string,
-    status: 'approved' | 'rejected' | 'suspended',
+    status: Exclude<OperatorStatus, 'pending'>,
     currentStatus?: Operator['status']
   ): Promise<void> {
     if (currentStatus && !this.canTransitionStatus(currentStatus, status)) {
@@ -551,15 +533,10 @@ export const operatorsApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend API failed, falling back to demo/supabase:', error);
+      console.warn('Backend operator status update failed, falling back to Supabase.', error);
     }
 
     if (isDemoMode) {
-      const operator = demoOperators.find(op => op.id === id);
-      if (operator) {
-        operator.status = status;
-        operator.updated_at = new Date().toISOString();
-      }
       return;
     }
     
@@ -577,14 +554,14 @@ export const operatorsApi = {
 
   async getPendingCount(): Promise<number> {
     if (isDemoMode) {
-      return demoOperators.filter(op => op.status === 'pending').length;
+      return demoOperators.filter((op) => op.status === OPERATOR_STATUS.pending).length;
     }
     
     const { count, error } = await supabase
       .from('users')
       .select('*', { count: 'exact', head: true })
       .eq('role', 'tow_operator')
-      .eq('verification_status', 'pending');
+      .eq('verification_status', OPERATOR_STATUS.pending);
     
     if (error) throw error;
     return count || 0;
@@ -621,7 +598,7 @@ export const usersApi = {
           email: user.email,
           phone: user.phone,
           full_name: user.full_name,
-          avatar_url: user.avatar_url,
+          avatar_url: resolveBackendAssetUrl(user.avatar_url) || undefined,
           role: user.role || 'user',
           is_active: user.is_active !== false,
           moderation_status:
@@ -635,7 +612,7 @@ export const usersApi = {
         }));
       }
     } catch (error) {
-      console.log('Backend API failed, falling back to demo data:', error);
+      console.warn('Backend users request failed, falling back to Supabase.', error);
     }
 
     if (isDemoMode) {
@@ -655,7 +632,7 @@ export const usersApi = {
       email: user.email,
       phone: user.phone,
       full_name: user.full_name,
-      avatar_url: user.avatar_url,
+      avatar_url: resolveBackendAssetUrl(user.avatar_url) || undefined,
       role: 'user',
       is_active: user.is_verified || true,
       moderation_status: user.is_active === false ? 'soft_banned' : 'active',
@@ -678,35 +655,10 @@ export const usersApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend user moderation failed, falling back to demo/supabase:', error);
+      console.warn('Backend user moderation failed, falling back to Supabase.', error);
     }
 
     if (isDemoMode) {
-      const user = demoUsers.find((item) => item.id === userId);
-      if (!user) {
-        throw new Error('User not found');
-      }
-
-      if (action === 'soft_ban') {
-        user.is_active = false;
-        user.moderation_status = 'soft_banned';
-        user.ban_reason = payload?.reason;
-        user.banned_at = new Date().toISOString();
-      }
-
-      if (action === 'permanent_ban') {
-        user.is_active = false;
-        user.moderation_status = 'permanently_banned';
-        user.ban_reason = payload?.reason;
-        user.banned_at = new Date().toISOString();
-      }
-
-      if (action === 'unblock') {
-        user.is_active = true;
-        user.moderation_status = 'active';
-        user.ban_reason = undefined;
-        user.banned_at = undefined;
-      }
       return;
     }
 
@@ -729,7 +681,7 @@ export const usersApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend user auth reset failed, falling back to no-op demo flow:', error);
+      console.warn('Backend reset auth failed, using local fallback.', error);
     }
 
     if (isDemoMode) {
@@ -761,7 +713,7 @@ export const requestsApi = {
       case 'cancel':
         return request.status !== 'completed' && request.status !== 'cancelled';
       case 'reassign':
-        return ['pending', 'accepted', 'en_route', 'arrived', 'in_progress'].includes(request.status);
+        return REQUEST_STATUSES.slice(0, 5).includes(request.status);
       case 'escalate':
       case 'mark_fraud':
       case 'emergency_override':
@@ -784,31 +736,46 @@ export const requestsApi = {
           operator_id: req.operator_id,
           operator_name: req.operator_name,
           pickup_location: {
-            address: req.pickup_address,
-            latitude: 0,
-            longitude: 0,
+            address: req.pickup_address || req.pickup_location?.address || 'Unknown pickup',
+            latitude: Number(req.pickup_lat ?? req.pickup_location?.latitude ?? 0),
+            longitude: Number(req.pickup_lng ?? req.pickup_location?.longitude ?? 0),
           },
           destination: {
-            address: req.dropoff_address,
-            latitude: 0,
-            longitude: 0,
+            address: req.dropoff_address || req.destination?.address || 'Unknown destination',
+            latitude: Number(req.dropoff_lat ?? req.destination?.latitude ?? 0),
+            longitude: Number(req.dropoff_lng ?? req.destination?.longitude ?? 0),
           },
           vehicle_type: req.vehicle_type,
           status: req.status,
-          estimated_price: req.estimated_price,
+          estimated_price: Number(req.estimated_price || 0),
           final_price: req.final_price,
-          distance_km: 0,
+          distance_km: Number(req.distance_km || 0),
           created_at: req.created_at,
+          accepted_at: req.accepted_at,
+          started_at: req.started_at,
           completed_at: req.completed_at,
+          cancelled_at: req.cancelled_at,
+          cancellation_reason: req.cancellation_reason,
           is_escalated: req.is_escalated,
           escalated_at: req.escalated_at,
           is_fraud_suspected: req.is_fraud_suspected,
           emergency_override: req.emergency_override,
           intervention_notes: req.intervention_notes,
+          eta_minutes: req.eta_minutes,
+          route_progress_percent: req.route_progress_percent,
+          operator_location: req.operator_location
+            ? {
+                latitude: Number(req.operator_location.latitude),
+                longitude: Number(req.operator_location.longitude),
+                heading: req.operator_location.heading,
+                speed_kmh: req.operator_location.speed_kmh,
+                updated_at: req.operator_location.updated_at,
+              }
+            : undefined,
         }));
       }
     } catch (error) {
-      console.log('Backend API failed, falling back to demo data:', error);
+      console.warn('Backend requests fetch failed, falling back to Supabase.', error);
     }
 
     if (isDemoMode) {
@@ -878,44 +845,10 @@ export const requestsApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend API intervention failed, falling back to demo/supabase:', error);
+      console.warn('Backend request intervention failed, falling back to Supabase.', error);
     }
 
     if (isDemoMode) {
-      const request = demoRequests.find((item) => item.id === requestId);
-      if (!request) {
-        throw new Error('Request not found');
-      }
-
-      if (!this.canIntervene(request, action)) {
-        throw new Error(`Intervention not allowed for request status: ${request.status}`);
-      }
-
-      const now = new Date().toISOString();
-      switch (action) {
-        case 'cancel':
-          request.status = 'cancelled';
-          request.cancelled_at = now;
-          request.cancellation_reason = payload?.reason || 'Cancelled by admin';
-          break;
-        case 'reassign':
-          request.operator_id = payload?.operator_id || undefined;
-          request.operator_name = payload?.operator_name || 'Reassigned by admin';
-          break;
-        case 'escalate':
-          request.is_escalated = true;
-          request.escalated_at = now;
-          request.intervention_notes = payload?.note;
-          break;
-        case 'mark_fraud':
-          request.is_fraud_suspected = true;
-          request.intervention_notes = payload?.note;
-          break;
-        case 'emergency_override':
-          request.emergency_override = true;
-          request.intervention_notes = payload?.note;
-          break;
-      }
       return;
     }
 
@@ -923,7 +856,7 @@ export const requestsApi = {
       const { error } = await supabase
         .from('towing_requests')
         .update({
-          status: 'cancelled',
+          status: REQUEST_STATUSES[6],
           cancelled_at: new Date().toISOString(),
           cancellation_reason: payload?.reason || 'Cancelled by admin',
         })
@@ -951,10 +884,10 @@ export const requestsApi = {
   async getStats(): Promise<{ pending: number; inProgress: number; completed: number; cancelled: number; totalRevenue: number }> {
     if (isDemoMode) {
       return {
-        pending: demoRequests.filter(r => r.status === 'pending').length,
-        inProgress: demoRequests.filter(r => r.status === 'in_progress').length,
-        completed: demoRequests.filter(r => r.status === 'completed').length,
-        cancelled: demoRequests.filter(r => r.status === 'cancelled').length,
+        pending: demoRequests.filter(r => r.status === REQUEST_STATUS.pending).length,
+        inProgress: demoRequests.filter(r => r.status === REQUEST_STATUS.inProgress).length,
+        completed: demoRequests.filter(r => r.status === REQUEST_STATUS.completed).length,
+        cancelled: demoRequests.filter(r => r.status === REQUEST_STATUS.cancelled).length,
         totalRevenue: demoRequests
           .filter(r => r.final_price)
           .reduce((sum, r) => sum + (r.final_price || 0), 0),
@@ -968,10 +901,10 @@ export const requestsApi = {
     if (error) throw error;
     
     return {
-      pending: data.filter(r => r.status === 'pending').length,
-      inProgress: data.filter(r => r.status === 'in_progress').length,
-      completed: data.filter(r => r.status === 'completed').length,
-      cancelled: data.filter(r => r.status === 'cancelled').length,
+      pending: data.filter(r => r.status === REQUEST_STATUS.pending).length,
+      inProgress: data.filter(r => r.status === REQUEST_STATUS.inProgress).length,
+      completed: data.filter(r => r.status === REQUEST_STATUS.completed).length,
+      cancelled: data.filter(r => r.status === REQUEST_STATUS.cancelled).length,
       totalRevenue: data
         .filter(r => r.final_price)
         .reduce((sum, r) => sum + (r.final_price || 0), 0),
@@ -1045,7 +978,7 @@ export const pricingApi = {
         }));
       }
     } catch (error) {
-      console.log('Backend pricing versions failed, falling back to demo data:', error);
+      console.warn('Backend pricing versions failed, using fallback history.', error);
     }
 
     if (pricingId) {
@@ -1074,28 +1007,10 @@ export const pricingApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend pricing version creation failed, falling back to demo/supabase:', error);
+      console.warn('Backend pricing update failed, falling back to Supabase.', error);
     }
 
     if (isDemoMode) {
-      const pricing = demoPricing.find(p => p.id === id);
-      if (pricing) {
-        Object.assign(pricing, data);
-
-        demoPricingVersions.unshift({
-          id: `pv-${id}-${Date.now()}`,
-          pricing_id: id,
-          vehicle_type: pricing.vehicle_type,
-          base_fee: data.base_fee ?? pricing.base_fee,
-          per_km_rate: data.per_km_rate ?? pricing.per_km_rate,
-          service_fee: data.service_fee ?? pricing.service_fee,
-          surge_multiplier: data.surge_multiplier ?? pricing.surge_multiplier,
-          zone_multiplier: data.zone_multiplier ?? pricing.zone_multiplier,
-          effective_from: effectiveFrom,
-          changed_at: new Date().toISOString(),
-          changed_by: 'admin',
-        });
-      }
       return;
     }
     
@@ -1118,8 +1033,10 @@ export const financeApi = {
           id: item.id,
           type: item.type,
           amount: Number(item.amount || 0),
-          status: item.status || 'pending',
+          status: item.status || PAYMENT_STATUSES[0],
           requestId: item.request_id || item.requestId || '-',
+          userId: item.user_id || item.userId,
+          operatorId: item.operator_id || item.operatorId,
           userName: item.user_name || item.userName || '-',
           operatorName: item.operator_name || item.operatorName || '-',
           method: item.method || item.payment_method || '-',
@@ -1129,14 +1046,10 @@ export const financeApi = {
         }));
       }
     } catch (error) {
-      console.log('Backend finance ledger failed, falling back to demo data:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    if (isDemoMode) {
-      return demoFinanceLedger;
-    }
-
-    return demoFinanceLedger;
+    throw backendFlowError('Backend ledger response was empty');
   },
 
   async requestRefund(paymentId: string, amount: number, reason?: string): Promise<void> {
@@ -1146,27 +1059,10 @@ export const financeApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend refund request failed, falling back to demo behavior:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    const payment = demoFinanceLedger.find((entry) => entry.id === paymentId && entry.type === 'payment');
-    if (!payment) {
-      throw new Error('Payment record not found for refund request.');
-    }
-
-    demoFinanceLedger.unshift({
-      id: `REF-${Date.now()}`,
-      type: 'refund',
-      amount,
-      status: 'pending',
-      requestId: payment.requestId,
-      userName: payment.userName,
-      operatorName: payment.operatorName,
-      method: payment.method,
-      date: new Date().toISOString(),
-      relatedPaymentId: paymentId,
-      reason,
-    });
+    throw backendFlowError('Backend refund request response was empty');
   },
 
   async approveRefund(refundId: string, note?: string): Promise<void> {
@@ -1176,16 +1072,10 @@ export const financeApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend refund approval failed, falling back to demo behavior:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    const refund = demoFinanceLedger.find((entry) => entry.id === refundId && entry.type === 'refund');
-    if (!refund) {
-      throw new Error('Refund record not found.');
-    }
-
-    refund.status = 'completed';
-    refund.reason = note || refund.reason;
+    throw backendFlowError('Backend refund approval response was empty');
   },
 
   async rejectRefund(refundId: string, reason?: string): Promise<void> {
@@ -1195,16 +1085,92 @@ export const financeApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend refund rejection failed, falling back to demo behavior:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    const refund = demoFinanceLedger.find((entry) => entry.id === refundId && entry.type === 'refund');
-    if (!refund) {
-      throw new Error('Refund record not found.');
+    throw backendFlowError('Backend refund rejection response was empty');
+  },
+
+  async processPayout(payoutId: string, note?: string): Promise<void> {
+    try {
+      const response = await backendApi.processPayout(payoutId, { note });
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      throw backendFlowError('Backend payout processing failed', error);
     }
 
-    refund.status = 'failed';
-    refund.reason = reason || refund.reason;
+    throw backendFlowError('Backend payout process response was empty');
+  },
+
+  async retryPayout(payoutId: string, note?: string): Promise<void> {
+    try {
+      const response = await backendApi.retryPayout(payoutId, { note });
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      throw backendFlowError('Backend payout retry failed', error);
+    }
+
+    throw backendFlowError('Backend payout retry response was empty');
+  },
+
+  async getPayoutQueue(): Promise<FinanceLedgerEntry[]> {
+    const ledger = await this.getLedger();
+    return ledger
+      .filter((entry) => entry.type === 'payout' && (entry.status === 'pending' || entry.status === 'failed'))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  },
+
+  async getRefundQueue(): Promise<FinanceLedgerEntry[]> {
+    const ledger = await this.getLedger();
+    return ledger
+      .filter((entry) => entry.type === 'refund' && entry.status === 'pending')
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  },
+
+  async getWalletBalances(): Promise<WalletBalanceEntry[]> {
+    const ledger = await this.getLedger();
+    const byOperator = new Map<string, WalletBalanceEntry>();
+
+    for (const entry of ledger) {
+      const operatorKey = entry.operatorId || entry.operatorName || 'unknown-operator';
+      const operatorName = entry.operatorName || 'Unknown Operator';
+
+      if (!byOperator.has(operatorKey)) {
+        byOperator.set(operatorKey, {
+          operatorKey,
+          operatorName,
+          totalPayments: 0,
+          totalPayouts: 0,
+          totalRefundAdjustments: 0,
+          balance: 0,
+        });
+      }
+
+      const bucket = byOperator.get(operatorKey)!;
+
+      if (entry.type === 'payment' && entry.status === 'completed') {
+        bucket.totalPayments += entry.amount;
+      }
+
+      if (entry.type === 'payout' && entry.status === 'completed') {
+        bucket.totalPayouts += entry.amount;
+      }
+
+      if (entry.type === 'refund' && entry.status === 'completed') {
+        bucket.totalRefundAdjustments += entry.amount;
+      }
+    }
+
+    return Array.from(byOperator.values())
+      .map((entry) => ({
+        ...entry,
+        balance: Number((entry.totalPayments - entry.totalPayouts - entry.totalRefundAdjustments).toFixed(2)),
+      }))
+      .sort((a, b) => b.balance - a.balance);
   },
 };
 
@@ -1243,10 +1209,10 @@ export const supportApi = {
         }));
       }
     } catch (error) {
-      console.log('Backend support tickets failed, falling back to demo data:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    return demoSupportTickets;
+    throw backendFlowError('Backend support tickets response was empty');
   },
 
   async updateTicket(
@@ -1266,15 +1232,10 @@ export const supportApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend support update failed, falling back to demo behavior:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    const ticket = demoSupportTickets.find((item) => item.id === ticketId);
-    if (!ticket) {
-      throw new Error('Support ticket not found.');
-    }
-
-    Object.assign(ticket, payload, { updated_at: new Date().toISOString() });
+    throw backendFlowError('Backend support update response was empty');
   },
 
   async addReply(ticketId: string, message: string, actorId?: string): Promise<void> {
@@ -1288,16 +1249,10 @@ export const supportApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend support reply failed, falling back to demo behavior:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    const ticket = demoSupportTickets.find((item) => item.id === ticketId);
-    if (!ticket) {
-      throw new Error('Support ticket not found.');
-    }
-
-    ticket.last_reply_at = new Date().toISOString();
-    ticket.updated_at = ticket.last_reply_at;
+    throw backendFlowError('Backend support reply response was empty');
   },
 
   async resolveDispute(
@@ -1306,14 +1261,9 @@ export const supportApi = {
     note?: string,
     refundAmount?: number
   ): Promise<void> {
-    const ticket = demoSupportTickets.find((item) => item.id === ticketId);
-
-    if (!ticket) {
-      throw new Error('Support ticket not found.');
-    }
-
-    if (!ticket.dispute_id) {
-      throw new Error('This ticket has no dispute attached.');
+    const ticket = await this.getTickets().then((tickets) => tickets.find((item) => item.id === ticketId));
+    if (!ticket || !ticket.dispute_id) {
+      throw new Error('Support ticket or linked dispute not found.');
     }
 
     try {
@@ -1326,18 +1276,10 @@ export const supportApi = {
         return;
       }
     } catch (error) {
-      console.log('Backend dispute resolution failed, falling back to demo behavior:', error);
+      throw backendFlowError('Backend request failed', error);
     }
 
-    ticket.status = 'resolved';
-    ticket.resolution_summary = [
-      `Decision: ${decision.replace('_', ' ')}`,
-      refundAmount ? `Refund: GHS ${refundAmount.toFixed(2)}` : undefined,
-      note,
-    ]
-      .filter(Boolean)
-      .join(' | ');
-    ticket.updated_at = new Date().toISOString();
+    throw backendFlowError('Backend dispute resolution response was empty');
   },
 
   async getStats(): Promise<{
@@ -1354,19 +1296,23 @@ export const supportApi = {
 
     return {
       open: tickets.filter((ticket) => ticket.status === 'open').length,
-      inProgress: tickets.filter((ticket) => ticket.status === 'in_progress').length,
-      resolved: tickets.filter((ticket) => ticket.status === 'resolved').length,
-      closed: tickets.filter((ticket) => ticket.status === 'closed').length,
+      inProgress: tickets.filter((ticket) => ticket.status === SUPPORT_STATUS.inProgress).length,
+      resolved: tickets.filter((ticket) => ticket.status === SUPPORT_STATUS.resolved).length,
+      closed: tickets.filter((ticket) => ticket.status === SUPPORT_STATUS.closed).length,
       highPriorityOpen: tickets.filter(
-        (ticket) => ['high', 'urgent'].includes(ticket.priority) && ['open', 'in_progress'].includes(ticket.status)
+        (ticket) =>
+          ([SUPPORT_PRIORITY.high, SUPPORT_PRIORITY.urgent] as SupportPriority[]).includes(ticket.priority) &&
+          ([SUPPORT_STATUS.open, SUPPORT_STATUS.inProgress] as SupportStatus[]).includes(ticket.status)
       ).length,
       disputeOpen: tickets.filter(
-        (ticket) => ticket.category === 'dispute' && ['open', 'in_progress'].includes(ticket.status)
+        (ticket) =>
+          ticket.category === 'dispute' &&
+          ([SUPPORT_STATUS.open, SUPPORT_STATUS.inProgress] as SupportStatus[]).includes(ticket.status)
       ).length,
       slaBreached: tickets.filter(
         (ticket) =>
           !!ticket.sla_due_at &&
-          ['open', 'in_progress'].includes(ticket.status) &&
+          ([SUPPORT_STATUS.open, SUPPORT_STATUS.inProgress] as SupportStatus[]).includes(ticket.status) &&
           new Date(ticket.sla_due_at).getTime() < now
       ).length,
     };
@@ -1388,19 +1334,19 @@ export const dashboardApi = {
     };
 
     if (isDemoMode) {
-      const completedRequests = demoRequests.filter((r) => r.status === 'completed').length;
-      const cancelledRequests = demoRequests.filter((r) => r.status === 'cancelled').length;
+      const completedRequests = demoRequests.filter((r) => r.status === REQUEST_STATUS.completed).length;
+      const cancelledRequests = demoRequests.filter((r) => r.status === REQUEST_STATUS.cancelled).length;
       const totalRequests = demoRequests.length;
 
       return {
         totalUsers: demoUsers.length,
-        totalOperators: demoOperators.filter(o => o.status === 'approved').length,
-        pendingOperators: demoOperators.filter(o => o.status === 'pending').length,
+        totalOperators: demoOperators.filter(o => o.status === OPERATOR_STATUS.approved).length,
+        pendingOperators: demoOperators.filter(o => o.status === OPERATOR_STATUS.pending).length,
         totalRequests,
-        activeRequests: demoRequests.filter(r => r.status === 'in_progress').length,
+        activeRequests: demoRequests.filter(r => r.status === REQUEST_STATUS.inProgress).length,
         completedRequests,
         cancelledRequests,
-        pendingRequests: demoRequests.filter(r => r.status === 'pending').length,
+        pendingRequests: demoRequests.filter(r => r.status === REQUEST_STATUS.pending).length,
         completionRate: totalRequests > 0 ? Number(((completedRequests / totalRequests) * 100).toFixed(1)) : 0,
         cancellationRate: totalRequests > 0 ? Number(((cancelledRequests / totalRequests) * 100).toFixed(1)) : 0,
         totalRevenue: demoRequests
@@ -1421,10 +1367,10 @@ export const dashboardApi = {
     ]);
 
     const totalRequests = allRequests.length;
-    const completedRequests = allRequests.filter((request) => request.status === 'completed').length;
-    const cancelledRequests = allRequests.filter((request) => request.status === 'cancelled').length;
-    const activeRequests = allRequests.filter((request) => request.status === 'in_progress').length;
-    const pendingRequests = allRequests.filter((request) => request.status === 'pending').length;
+    const completedRequests = allRequests.filter((request) => request.status === REQUEST_STATUS.completed).length;
+    const cancelledRequests = allRequests.filter((request) => request.status === REQUEST_STATUS.cancelled).length;
+    const activeRequests = allRequests.filter((request) => request.status === REQUEST_STATUS.inProgress).length;
+    const pendingRequests = allRequests.filter((request) => request.status === REQUEST_STATUS.pending).length;
     const totalRevenue = allRequests
       .filter((request) => !!request.final_price)
       .reduce((sum, request) => sum + (request.final_price || 0), 0);
@@ -1434,8 +1380,8 @@ export const dashboardApi = {
     
     return {
       totalUsers: usersCount,
-      totalOperators: operatorsResult.filter(o => o.status === 'approved').length,
-      pendingOperators: operatorsResult.filter(o => o.status === 'pending').length,
+      totalOperators: operatorsResult.filter(o => o.status === OPERATOR_STATUS.approved).length,
+      pendingOperators: operatorsResult.filter(o => o.status === OPERATOR_STATUS.pending).length,
       totalRequests,
       activeRequests,
       completedRequests,
@@ -1449,6 +1395,48 @@ export const dashboardApi = {
     };
   },
 
+  async getRevenueSeries(days = 7): Promise<RevenuePoint[]> {
+    try {
+      const response = await backendApi.getDashboardRevenueSeries({ days });
+      if (response.success && response.data?.length) {
+        return response.data.map((point: any) => ({
+          date: point.date,
+          revenue: Number(point.revenue || 0),
+          trips: Number(point.trips || 0),
+        }));
+      }
+    } catch (error) {
+      console.warn('Backend revenue series failed, deriving from requests.', error);
+    }
+
+    const requests = await requestsApi.getAll();
+    const completed = requests.filter((entry) => entry.status === REQUEST_STATUS.completed && !!entry.final_price);
+    const now = new Date();
+    const series: RevenuePoint[] = [];
+
+    for (let i = days - 1; i >= 0; i -= 1) {
+      const day = new Date(now);
+      day.setHours(0, 0, 0, 0);
+      day.setDate(day.getDate() - i);
+
+      const nextDay = new Date(day);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      const dayPayments = completed.filter((entry) => {
+        const date = new Date(entry.completed_at || entry.created_at);
+        return date >= day && date < nextDay;
+      });
+
+      series.push({
+        date: day.toISOString().slice(0, 10),
+        revenue: Number(dayPayments.reduce((sum, entry) => sum + (entry.final_price || 0), 0).toFixed(2)),
+        trips: dayPayments.length,
+      });
+    }
+
+    return series;
+  },
+
   async getAlerts(): Promise<
     Array<{
       id: string;
@@ -1460,11 +1448,18 @@ export const dashboardApi = {
       route: string;
     }>
   > {
-    const [ledger, requests, supportStats] = await Promise.all([
+    const [ledgerResult, requestsResult, supportStatsResult] = await Promise.allSettled([
       financeApi.getLedger(),
       requestsApi.getAll(),
       supportApi.getStats(),
     ]);
+
+    const ledger = ledgerResult.status === 'fulfilled' ? ledgerResult.value : [];
+    const requests = requestsResult.status === 'fulfilled' ? requestsResult.value : [];
+    const supportStats =
+      supportStatsResult.status === 'fulfilled'
+        ? supportStatsResult.value
+        : { open: 0, inProgress: 0, resolved: 0, closed: 0, highPriorityOpen: 0, disputeOpen: 0, slaBreached: 0 };
 
     const failedPayments = ledger.filter((entry) => entry.type === 'payment' && entry.status === 'failed').length;
     const unresolvedDisputes = supportStats.disputeOpen;
@@ -1532,10 +1527,505 @@ export const dashboardApi = {
 
   async getPendingOperators(): Promise<Operator[]> {
     if (isDemoMode) {
-      return demoOperators.filter(o => o.status === 'pending').slice(0, 5);
+      return demoOperators.filter(o => o.status === OPERATOR_STATUS.pending).slice(0, 5);
     }
     
     const allOperators = await operatorsApi.getAll();
-    return allOperators.filter(o => o.status === 'pending').slice(0, 5);
+    return allOperators.filter(o => o.status === OPERATOR_STATUS.pending).slice(0, 5);
   },
 };
+
+export const notificationsApi = {
+  async getAll(unreadOnly = false): Promise<Notification[]> {
+    try {
+      const response = await backendApi.getNotifications({ unreadOnly, limit: 100 });
+      if (response.success && response.data) {
+        return response.data.map((notification: any) => ({
+          id: notification.id,
+          type: notification.type || 'system',
+          title: notification.title,
+          message: notification.message,
+          target: notification.target || 'all',
+          is_read: Boolean(notification.is_read ?? notification.read),
+          read_at: notification.read_at,
+          severity: notification.severity || 'low',
+          action_url: notification.action_url,
+          created_at: notification.created_at,
+        }));
+      }
+    } catch (error) {
+      console.warn('Backend notifications fetch failed, falling back to Supabase.', error);
+    }
+
+    if (isDemoMode) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) throw error;
+
+    const records = (data || []).map((notification: any) => ({
+      id: notification.id,
+      type: notification.type || 'system',
+      title: notification.title,
+      message: notification.message,
+      target: notification.target || 'all',
+      is_read: Boolean(notification.is_read),
+      read_at: notification.read_at,
+      severity: notification.severity || 'low',
+      action_url: notification.action_url,
+      created_at: notification.created_at,
+    }));
+
+    return unreadOnly ? records.filter((item) => !item.is_read) : records;
+  },
+
+  async markRead(id: string): Promise<void> {
+    try {
+      const response = await backendApi.markNotificationRead(id);
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      console.warn('Backend notification mark-read failed, falling back to Supabase.', error);
+    }
+
+    if (isDemoMode) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('id', id);
+
+    if (error) throw error;
+  },
+
+  async markAllRead(): Promise<void> {
+    try {
+      const response = await backendApi.markAllNotificationsRead();
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      console.warn('Backend mark-all-read failed, falling back to Supabase.', error);
+    }
+
+    if (isDemoMode) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('target', 'admin');
+
+    if (error) throw error;
+  },
+
+  async delete(id: string): Promise<void> {
+    try {
+      const response = await backendApi.deleteNotification(id);
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      console.warn('Backend notification delete failed, falling back to Supabase.', error);
+    }
+
+    if (isDemoMode) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  },
+
+  async clearAll(): Promise<void> {
+    try {
+      const response = await backendApi.clearNotifications();
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      console.warn('Backend clear notifications failed, falling back to Supabase.', error);
+    }
+
+    if (isDemoMode) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('target', 'admin');
+
+    if (error) throw error;
+  },
+};
+
+export const settingsApi = {
+  async get(): Promise<AdminSettings> {
+    const storageKey = 'towme_admin_settings';
+
+    try {
+      const response = await backendApi.getAdminSettings();
+      if (response.success && response.data) {
+        const settings: AdminSettings = {
+          profile: {
+            name: response.data.profile?.name || 'Admin User',
+            email: response.data.profile?.email || 'admin@towme.com',
+            phone: response.data.profile?.phone,
+            avatar_url: resolveBackendAssetUrl(response.data.profile?.avatar_url) || null,
+          },
+          notifications: {
+            emailNotifications: Boolean(response.data.notifications?.emailNotifications ?? true),
+            pushNotifications: Boolean(response.data.notifications?.pushNotifications ?? true),
+            newOperators: Boolean(response.data.notifications?.newOperators ?? true),
+            newRequests: Boolean(response.data.notifications?.newRequests ?? true),
+            payments: Boolean(response.data.notifications?.payments ?? true),
+            systemAlerts: Boolean(response.data.notifications?.systemAlerts ?? true),
+          },
+          system: {
+            language: response.data.system?.language || 'English',
+            timezone: response.data.system?.timezone || 'Africa/Accra',
+            currency: response.data.system?.currency || 'GHS',
+          },
+        };
+
+        writeToStorage(storageKey, JSON.stringify(settings));
+        return settings;
+      }
+    } catch (error) {
+      console.warn('Backend settings fetch failed, falling back to local cache.', error);
+    }
+
+    const local = readFromStorage(storageKey);
+    if (local) {
+      try {
+        return JSON.parse(local) as AdminSettings;
+      } catch {
+        // Ignore malformed local cache and return defaults below.
+      }
+    }
+
+    const defaults = getDefaultAdminSettings();
+    writeToStorage(storageKey, JSON.stringify(defaults));
+    return defaults;
+  },
+
+  async update(payload: {
+    profile?: Partial<AdminSettings['profile']>;
+    notifications?: Partial<AdminSettings['notifications']>;
+    system?: Partial<AdminSettings['system']>;
+  }): Promise<void> {
+    const storageKey = 'towme_admin_settings';
+
+    try {
+      const response = await backendApi.updateAdminSettings(payload);
+      if (response.success) {
+        const current = await this.get();
+        const nextState: AdminSettings = {
+          profile: { ...current.profile, ...(payload.profile || {}) },
+          notifications: { ...current.notifications, ...(payload.notifications || {}) },
+          system: { ...current.system, ...(payload.system || {}) },
+        };
+        writeToStorage(storageKey, JSON.stringify(nextState));
+        return;
+      }
+    } catch (error) {
+      console.warn('Backend settings update failed, writing to local cache.', error);
+    }
+
+    const current = await this.get();
+    const nextState: AdminSettings = {
+      profile: { ...current.profile, ...(payload.profile || {}) },
+      notifications: { ...current.notifications, ...(payload.notifications || {}) },
+      system: { ...current.system, ...(payload.system || {}) },
+    };
+    writeToStorage(storageKey, JSON.stringify(nextState));
+  },
+};
+
+export const securityApi = {
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    try {
+      const response = await backendApi.changePassword({ currentPassword, newPassword });
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      throw backendFlowError('Backend request failed', error);
+    }
+
+    throw backendFlowError('Password change requires backend response validation');
+  },
+
+  async setTwoFactorEnabled(enabled: boolean): Promise<void> {
+    try {
+      const response = await backendApi.updateTwoFactor({ enabled });
+      if (response.success) {
+        return;
+      }
+    } catch (error) {
+      throw backendFlowError('Backend request failed', error);
+    }
+  },
+};
+
+export const auditApi = {
+  async getAll(params?: {
+    page?: number;
+    limit?: number;
+    action?: string;
+    search?: string;
+    from?: string;
+    to?: string;
+  }): Promise<AuditLogRecord[]> {
+    try {
+      const response = await backendApi.getAuditLogs(params);
+      if (response.success && response.data) {
+        return response.data.map((item: any) => ({
+          id: item.id,
+          action: item.action,
+          resource_type: item.resource_type || item.resourceType,
+          resource_id: item.resource_id || item.resourceId,
+          actor_id: item.actor_id || item.actorId,
+          before: item.before,
+          after: item.after,
+          metadata: item.metadata,
+          timestamp: item.timestamp || item.created_at,
+        }));
+      }
+    } catch (error) {
+      console.warn('Backend audit logs fetch failed, falling back to Supabase.', error);
+    }
+
+    if (isDemoMode) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select('*')
+      .order('timestamp', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((item: any) => ({
+      id: item.id,
+      action: item.action,
+      resource_type: item.resource_type,
+      resource_id: item.resource_id,
+      actor_id: item.actor_id,
+      before: item.before,
+      after: item.after,
+      metadata: item.metadata,
+      timestamp: item.timestamp || item.created_at,
+    }));
+  },
+
+  async getPaginated(params?: {
+    page?: number;
+    limit?: number;
+    action?: string;
+    search?: string;
+    from?: string;
+    to?: string;
+  }): Promise<{ items: AuditLogRecord[]; total: number; page: number; limit: number }> {
+    const page = params?.page || 1;
+    const limit = params?.limit || 20;
+
+    try {
+      const response = await backendApi.getAuditLogs(params);
+      if (response.success && response.data) {
+        const items = response.data.map((item: any) => ({
+          id: item.id,
+          action: item.action,
+          resource_type: item.resource_type || item.resourceType,
+          resource_id: item.resource_id || item.resourceId,
+          actor_id: item.actor_id || item.actorId,
+          before: item.before,
+          after: item.after,
+          metadata: item.metadata,
+          timestamp: item.timestamp || item.created_at,
+        }));
+
+        return {
+          items,
+          total: response.pagination?.total || items.length,
+          page: response.pagination?.page || page,
+          limit: response.pagination?.limit || limit,
+        };
+      }
+    } catch (error) {
+      console.warn('Backend paginated audit logs failed, falling back to Supabase.', error);
+    }
+
+    if (isDemoMode) {
+      return { items: [], total: 0, page, limit };
+    }
+
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const query = supabase
+      .from('audit_logs')
+      .select('*', { count: 'exact' })
+      .order('timestamp', { ascending: false })
+      .range(from, to);
+
+    const { data, error, count } = await query;
+    if (error) throw error;
+
+    const items = (data || []).map((item: any) => ({
+      id: item.id,
+      action: item.action,
+      resource_type: item.resource_type,
+      resource_id: item.resource_id,
+      actor_id: item.actor_id,
+      before: item.before,
+      after: item.after,
+      metadata: item.metadata,
+      timestamp: item.timestamp || item.created_at,
+    }));
+
+    return {
+      items,
+      total: count || items.length,
+      page,
+      limit,
+    };
+  },
+};
+
+export type BackendReadinessStatus = 'healthy' | 'warning' | 'down';
+
+export interface BackendReadinessCheck {
+  id: string;
+  label: string;
+  status: BackendReadinessStatus;
+  message: string;
+  checkedAt: string;
+}
+
+export const readinessApi = {
+  async checkModules(): Promise<BackendReadinessCheck[]> {
+    const checkedAt = new Date().toISOString();
+
+    const checks: Array<{
+      id: string;
+      label: string;
+      probe: () => Promise<unknown>;
+    }> = [
+      {
+        id: 'dashboard',
+        label: 'Dashboard Stats',
+        probe: async () => {
+          await backendApi.getDashboardStats();
+        },
+      },
+      {
+        id: 'operators',
+        label: 'Operator Verification',
+        probe: async () => {
+          await backendApi.getOperators({ page: 1, limit: 1 });
+        },
+      },
+      {
+        id: 'requests',
+        label: 'Live Requests',
+        probe: async () => {
+          await backendApi.getRequests({ page: 1, limit: 1 });
+        },
+      },
+      {
+        id: 'pricing',
+        label: 'Pricing Management',
+        probe: async () => {
+          await backendApi.getPricing();
+        },
+      },
+      {
+        id: 'payments',
+        label: 'Payments Ledger',
+        probe: async () => {
+          await backendApi.getPaymentLedger({ page: 1, limit: 1 });
+        },
+      },
+      {
+        id: 'support',
+        label: 'Support Tickets',
+        probe: async () => {
+          await backendApi.getSupportTickets({ page: 1, limit: 1 });
+        },
+      },
+      {
+        id: 'notifications',
+        label: 'Notifications',
+        probe: async () => {
+          await backendApi.getNotifications({ page: 1, limit: 1 });
+        },
+      },
+      {
+        id: 'audit',
+        label: 'Audit Logs',
+        probe: async () => {
+          await backendApi.getAuditLogs({ page: 1, limit: 1 });
+        },
+      },
+    ];
+
+    const results = await Promise.all(
+      checks.map(async (check) => {
+        try {
+          await check.probe();
+          return {
+            id: check.id,
+            label: check.label,
+            status: 'healthy' as const,
+            message: 'Operational',
+            checkedAt,
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error || 'Unknown error');
+
+          const lowered = message.toLowerCase();
+          const isAuthIssue = lowered.includes('401') || lowered.includes('403') || lowered.includes('unauthorized') || lowered.includes('forbidden');
+
+          return {
+            id: check.id,
+            label: check.label,
+            status: (isAuthIssue ? 'warning' : 'down') as BackendReadinessStatus,
+            message: isAuthIssue ? 'Endpoint reachable but auth/session is limited' : message,
+            checkedAt,
+          };
+        }
+      })
+    );
+
+    if (isDemoMode) {
+      return results.map((entry) => ({
+        ...entry,
+        status: entry.status === 'down' ? 'warning' : entry.status,
+        message:
+          entry.status === 'healthy'
+            ? 'Demo mode active; backend verification may be partial'
+            : entry.message,
+      }));
+    }
+
+    return results;
+  },
+};
+

@@ -27,6 +27,8 @@ import {
 } from 'recharts';
 import { cn } from '../lib/utils';
 import { dashboardApi } from '../lib/api';
+import { REQUEST_STATUSES } from '../lib/contracts';
+import { formatStatusLabel } from '../lib/status-label';
 
 interface StatCardProps {
   title: string;
@@ -70,33 +72,40 @@ const StatCard = ({ title, value, change, icon: Icon, iconBg, onClick }: StatCar
 );
 
 const getStatusBadge = (status: string) => {
+  const REQUEST_STATUS = {
+    pending: REQUEST_STATUSES[0],
+    inProgress: REQUEST_STATUSES[4],
+    completed: REQUEST_STATUSES[5],
+    cancelled: REQUEST_STATUSES[6],
+  } as const;
+
   switch (status) {
-    case 'completed':
+    case REQUEST_STATUS.completed:
       return (
         <span className="flex items-center gap-1 text-green-400 bg-green-500/10 px-2 py-1 rounded-lg text-sm">
           <CheckCircle className="w-4 h-4" />
-          Completed
+          {formatStatusLabel(status)}
         </span>
       );
-    case 'in_progress':
+    case REQUEST_STATUS.inProgress:
       return (
         <span className="flex items-center gap-1 text-primary-500 bg-primary-500/10 px-2 py-1 rounded-lg text-sm">
           <Clock className="w-4 h-4" />
-          In Progress
+          {formatStatusLabel(status)}
         </span>
       );
-    case 'pending':
+    case REQUEST_STATUS.pending:
       return (
         <span className="flex items-center gap-1 text-yellow-400 bg-yellow-500/10 px-2 py-1 rounded-lg text-sm">
           <Clock className="w-4 h-4" />
-          Pending
+          {formatStatusLabel(status)}
         </span>
       );
-    case 'cancelled':
+    case REQUEST_STATUS.cancelled:
       return (
         <span className="flex items-center gap-1 text-red-400 bg-red-500/10 px-2 py-1 rounded-lg text-sm">
           <AlertTriangle className="w-4 h-4" />
-          Cancelled
+          {formatStatusLabel(status)}
         </span>
       );
     default:
@@ -131,6 +140,12 @@ export default function DashboardPage() {
     refetchInterval: 30000,
   });
 
+  const { data: revenueSeries = [] } = useQuery({
+    queryKey: ['dashboard-revenue-series'],
+    queryFn: () => dashboardApi.getRevenueSeries(7),
+    refetchInterval: 60000,
+  });
+
   // Chart data based on stats
   const requestsByStatus = [
     { name: 'Completed', value: stats?.completedRequests || 0, color: '#22c55e' },
@@ -138,18 +153,11 @@ export default function DashboardPage() {
     { name: 'Pending', value: stats?.pendingRequests || 0, color: '#eab308' },
   ];
 
-  // Revenue data derived from stats — distribute total revenue across days
-  const totalRev = stats?.totalRevenue || 0;
-  const dailyAvg = totalRev > 0 ? totalRev / 7 : 0;
-  const revenueData = [
-    { name: 'Mon', revenue: Math.round(dailyAvg * 0.85) },
-    { name: 'Tue', revenue: Math.round(dailyAvg * 0.78) },
-    { name: 'Wed', revenue: Math.round(dailyAvg * 1.05) },
-    { name: 'Thu', revenue: Math.round(dailyAvg * 0.95) },
-    { name: 'Fri', revenue: Math.round(dailyAvg * 1.20) },
-    { name: 'Sat', revenue: Math.round(dailyAvg * 1.35) },
-    { name: 'Sun', revenue: Math.round(totalRev - Math.round(dailyAvg * 0.85) - Math.round(dailyAvg * 0.78) - Math.round(dailyAvg * 1.05) - Math.round(dailyAvg * 0.95) - Math.round(dailyAvg * 1.20) - Math.round(dailyAvg * 1.35)) },
-  ];
+  const revenueData = revenueSeries.map((point) => ({
+    name: new Date(point.date).toLocaleDateString('en-GB', { weekday: 'short' }),
+    revenue: Math.round(point.revenue),
+    trips: point.trips,
+  }));
 
   const statCards = [
     {

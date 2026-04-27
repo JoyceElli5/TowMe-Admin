@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { Loader2 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -18,6 +19,7 @@ const pageTitles: Record<string, string> = {
   '/notifications': 'Notifications',
   '/support': 'Support Tickets',
   '/settings': 'Settings',
+  '/audit-logs': 'Audit Logs',
 };
 
 // Page transition variants
@@ -46,6 +48,7 @@ const pageVariants = {
 export default function DashboardLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { adminUser, loading } = useAuth();
+  const { isDark } = useTheme();
   const location = useLocation();
 
   // Get current page title
@@ -68,10 +71,17 @@ export default function DashboardLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-transparent relative transition-colors duration-300">
+    <div className={cn('min-h-screen bg-transparent relative transition-colors duration-300', isDark ? 'dark' : '')}>
       {/* Background light gradient + subtle noise overlay */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-white via-gray-50 to-gray-100" />
+        <div
+          className={cn(
+            'absolute inset-0',
+            isDark
+              ? 'bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800'
+              : 'bg-gradient-to-br from-white via-gray-50 to-gray-100'
+          )}
+        />
       </div>
 
       {/* Sidebar */}

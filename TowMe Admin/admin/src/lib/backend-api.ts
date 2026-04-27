@@ -3,7 +3,62 @@
  * Connects admin app to the TowMe backend API
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+import type {
+  OperatorStatus,
+  PaymentStatus,
+  RequestInterventionAction,
+  RequestStatus,
+  SupportCategory,
+  SupportPriority,
+  SupportStatus,
+  UserModerationAction,
+} from './contracts';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL;
+
+function getBackendOrigin(): string {
+  if (!API_BASE_URL) {
+    return '';
+  }
+
+  try {
+    return new URL(API_BASE_URL).origin;
+  } catch {
+    return '';
+  }
+}
+
+export function resolveBackendAssetUrl(url?: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+
+  const trimmed = url.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith('//')) {
+    return `https:${trimmed}`;
+  }
+
+  const normalizedPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const origin = getBackendOrigin();
+
+  if (origin) {
+    return `${origin}${normalizedPath}`;
+  }
+
+  if (API_BASE_URL) {
+    return `${API_BASE_URL.replace(/\/+$/, '')}${normalizedPath}`;
+  }
+
+  return normalizedPath;
+}
 
 interface ApiResponse<T> {
   success: boolean;
@@ -28,6 +83,10 @@ class BackendApi {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<ApiResponse<T>> {
+    if (!API_BASE_URL) {
+      throw new Error('Missing VITE_API_URL. Backend URL is required.');
+    }
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -92,11 +151,20 @@ class BackendApi {
     }>('/admin/stats');
   }
 
+  async getDashboardRevenueSeries(params?: { days?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params?.days) queryParams.append('days', params.days.toString());
+    const query = queryParams.toString();
+    return this.request<Array<{ date: string; revenue: number; trips: number }>>(
+      `/admin/stats/revenue-series${query ? `?${query}` : ''}`
+    );
+  }
+
   // ============================================================================
   // OPERATORS
   // ============================================================================
 
-  async getOperators(params?: { status?: string; search?: string; page?: number; limit?: number }) {
+  async getOperators(params?: { status?: OperatorStatus; search?: string; page?: number; limit?: number }) {
     const queryParams = new URLSearchParams();
     if (params?.status) queryParams.append('status', params.status);
     if (params?.search) queryParams.append('search', params.search);
@@ -111,7 +179,7 @@ class BackendApi {
     return this.request<any>(`/admin/operators/${id}`);
   }
 
-  async updateOperatorStatus(id: string, status: string, notes?: string) {
+  async updateOperatorStatus(id: string, status: Exclude<OperatorStatus, 'pending'>, notes?: string) {
     return this.request<any>(`/admin/operators/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status, notes }),
@@ -142,7 +210,7 @@ class BackendApi {
 
   async moderateUser(
     id: string,
-    action: 'soft_ban' | 'permanent_ban' | 'unblock',
+    action: Extract<UserModerationAction, 'soft_ban' | 'permanent_ban' | 'unblock'>,
     payload?: { reason?: string }
   ) {
     return this.request<any>(`/admin/users/${id}/moderation`, {
@@ -161,7 +229,7 @@ class BackendApi {
   // REQUESTS
   // ============================================================================
 
-  async getRequests(params?: { status?: string; page?: number; limit?: number }) {
+  async getRequests(params?: { status?: RequestStatus; page?: number; limit?: number }) {
     const queryParams = new URLSearchParams();
     if (params?.status) queryParams.append('status', params.status);
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -171,9 +239,17 @@ class BackendApi {
     return this.request<any[]>(`/admin/requests${query ? `?${query}` : ''}`);
   }
 
+  async getLiveOperationsSnapshot() {
+    return this.request<{
+      requests: any[];
+      operators: any[];
+      updated_at?: string;
+    }>('/admin/requests/live');
+  }
+
   async interveneRequest(
     id: string,
-    action: 'cancel' | 'reassign' | 'escalate' | 'mark_fraud' | 'emergency_override',
+    action: RequestInterventionAction,
     payload?: Record<string, unknown>
   ) {
     return this.request<any>(`/admin/requests/${id}/interventions`, {
@@ -234,7 +310,7 @@ class BackendApi {
   // PAYMENTS
   // ============================================================================
 
-  async getPayments(params?: { status?: string; page?: number; limit?: number }) {
+  async getPayments(params?: { status?: PaymentStatus; page?: number; limit?: number }) {
     const queryParams = new URLSearchParams();
     if (params?.status) queryParams.append('status', params.status);
     if (params?.page) queryParams.append('page', params.page.toString());
@@ -244,7 +320,7 @@ class BackendApi {
     return this.request<any[]>(`/admin/payments${query ? `?${query}` : ''}`);
   }
 
-  async getPaymentLedger(params?: { type?: string; status?: string; search?: string; page?: number; limit?: number }) {
+  async getPaymentLedger(params?: { type?: string; status?: PaymentStatus; search?: string; page?: number; limit?: number }) {
     const queryParams = new URLSearchParams();
     if (params?.type) queryParams.append('type', params.type);
     if (params?.status) queryParams.append('status', params.status);
@@ -280,14 +356,28 @@ class BackendApi {
     });
   }
 
+  async processPayout(payoutId: string, payload?: { note?: string }) {
+    return this.request<any>(`/admin/finance/payouts/${payoutId}/process`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
+  async retryPayout(payoutId: string, payload?: { note?: string }) {
+    return this.request<any>(`/admin/finance/payouts/${payoutId}/retry`, {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    });
+  }
+
   // ============================================================================
   // SUPPORT & DISPUTES
   // ============================================================================
 
   async getSupportTickets(params?: {
-    status?: string;
-    priority?: string;
-    category?: string;
+    status?: SupportStatus;
+    priority?: SupportPriority;
+    category?: SupportCategory;
     search?: string;
     page?: number;
     limit?: number;
@@ -307,8 +397,8 @@ class BackendApi {
   async updateSupportTicket(
     ticketId: string,
     payload: {
-      status?: 'open' | 'in_progress' | 'resolved' | 'closed';
-      priority?: 'low' | 'medium' | 'high' | 'urgent';
+      status?: SupportStatus;
+      priority?: SupportPriority;
       assigned_to?: string;
       assigned_to_name?: string;
       sla_due_at?: string;
@@ -350,6 +440,93 @@ class BackendApi {
   }
 
   // ============================================================================
+  // NOTIFICATIONS
+  // ============================================================================
+
+  async getNotifications(params?: { unreadOnly?: boolean; page?: number; limit?: number }) {
+    const queryParams = new URLSearchParams();
+    if (params?.unreadOnly) queryParams.append('unread_only', 'true');
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const query = queryParams.toString();
+
+    return this.request<any[]>(`/admin/notifications${query ? `?${query}` : ''}`);
+  }
+
+  async markNotificationRead(id: string) {
+    return this.request<any>(`/admin/notifications/${id}/read`, {
+      method: 'POST',
+    });
+  }
+
+  async markAllNotificationsRead() {
+    return this.request<any>('/admin/notifications/read-all', {
+      method: 'POST',
+    });
+  }
+
+  async deleteNotification(id: string) {
+    return this.request<any>(`/admin/notifications/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async clearNotifications() {
+    return this.request<any>('/admin/notifications/clear', {
+      method: 'DELETE',
+    });
+  }
+
+  // ============================================================================
+  // SETTINGS & SECURITY
+  // ============================================================================
+
+  async getAdminSettings() {
+    return this.request<any>('/admin/settings');
+  }
+
+  async updateAdminSettings(payload: {
+    profile?: {
+      name?: string;
+      email?: string;
+      phone?: string;
+      avatar_url?: string | null;
+    };
+    notifications?: {
+      emailNotifications?: boolean;
+      pushNotifications?: boolean;
+      newOperators?: boolean;
+      newRequests?: boolean;
+      payments?: boolean;
+      systemAlerts?: boolean;
+    };
+    system?: {
+      language?: string;
+      timezone?: string;
+      currency?: string;
+    };
+  }) {
+    return this.request<any>('/admin/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async changePassword(payload: { currentPassword: string; newPassword: string }) {
+    return this.request<any>('/admin/settings/security/password', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateTwoFactor(payload: { enabled: boolean }) {
+    return this.request<any>('/admin/settings/security/2fa', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  // ============================================================================
   // AUDIT LOGGING
   // ============================================================================
 
@@ -366,6 +543,26 @@ class BackendApi {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+  }
+
+  async getAuditLogs(params?: {
+    page?: number;
+    limit?: number;
+    action?: string;
+    search?: string;
+    from?: string;
+    to?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.action) queryParams.append('action', params.action);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.from) queryParams.append('from', params.from);
+    if (params?.to) queryParams.append('to', params.to);
+    const query = queryParams.toString();
+
+    return this.request<any[]>(`/admin/audit-logs${query ? `?${query}` : ''}`);
   }
 }
 
